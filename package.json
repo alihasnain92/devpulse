@@ -1,0 +1,31 @@
+{
+  "name": "devpulse",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DevPulse — API Uptime Monitoring and Incident Management Platform",
+  "scripts": {
+    "dev": "concurrently -n \"web,api,worker\" -c \"cyan,blue,magenta\" \"pnpm --filter web dev\" \"pnpm --filter api start:dev\" \"pnpm --filter api start:worker:dev\"",
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter api start:dev",
+    "dev:worker": "pnpm --filter api start:worker:dev",
+    "dev:services": "docker compose up -d",
+    "dev:services:down": "docker compose down",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "dotenv": "^16.4.7",
+    "prisma": "^7.10.1",
+    "typescript": "^5.7.3"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "packageManager": "pnpm@12.15.0"
+}

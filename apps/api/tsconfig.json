@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "declaration": false,
+    "declarationMap": false,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2022",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "paths": {
+      "@devpulse/shared": ["../../packages/shared/src/index.ts"],
+      "@devpulse/prisma": ["../../prisma/generated/client/client"]
+    }
+  },
+  "include": ["src/**/*", "../../prisma/generated/client/**/*"]
+}
