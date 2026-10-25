@@ -9,6 +9,7 @@
     "start:worker": "node dist/apps/api/src/worker.js",
     "start:worker:dev": "nest start --entryFile worker --watch",
     "test": "jest",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

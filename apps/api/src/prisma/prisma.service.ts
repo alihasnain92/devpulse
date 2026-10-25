@@ -4,7 +4,10 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
 @Injectable()
-export class PrismaService extends (PrismaClient as new (options: any) => any) implements OnModuleInit, OnModuleDestroy {
+export class PrismaService
+  extends (PrismaClient as new (options?: { adapter: PrismaPg }) => PrismaClient)
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(PrismaService.name);
   private pool: Pool;
 
@@ -20,8 +23,9 @@ export class PrismaService extends (PrismaClient as new (options: any) => any) i
     try {
       await this.$connect();
       this.logger.log('Prisma 7 Client connected with PostgreSQL driver adapter');
-    } catch (err: any) {
-      this.logger.error(`Database connection failed: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Database connection failed: ${message}`);
     }
   }
 
