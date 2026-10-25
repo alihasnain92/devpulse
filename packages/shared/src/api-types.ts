@@ -11,6 +11,26 @@ export interface UserDto {
   createdAt: string;
 }
 
+export interface RegisterRequestDto {
+  email: string;
+  name: string;
+  password: string;
+}
+
+export interface LoginRequestDto {
+  email: string;
+  password: string;
+}
+
+export interface AuthResponseDto {
+  user: UserDto;
+  message: string;
+}
+
+export interface MessageResponseDto {
+  message: string;
+}
+
 export interface MonitorDto {
   id: string;
   userId: string;

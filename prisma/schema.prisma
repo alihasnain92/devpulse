@@ -31,7 +31,7 @@ model User {
 model RefreshSession {
   id                 String    @id @default(uuid())
   userId             String
-  hashedRefreshToken String
+  hashedRefreshToken String    @unique
   familyId           String
   expiresAt          DateTime
   isRevoked          Boolean   @default(false)

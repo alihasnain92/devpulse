@@ -1,4 +1,11 @@
-import { HttpMethod, MONITOR_LIMITS, DEMO_CONFIG } from './constants';
+import {
+  HttpMethod,
+  MONITOR_LIMITS,
+  AUTH_COOKIES,
+  AUTH_EXPIRY,
+  SECURITY_CONFIG,
+  DEMO_CONFIG,
+} from './constants';
 
 describe('Shared Constants', () => {
   describe('HttpMethod', () => {
@@ -28,6 +35,29 @@ describe('Shared Constants', () => {
       expect(MONITOR_LIMITS.MAX_RESPONSE_BYTES).toBe(1024 * 1024); // 1MB stream cap
       expect(MONITOR_LIMITS.DEFAULT_EXPECTED_STATUS).toBe(200);
       expect(MONITOR_LIMITS.CONSECUTIVE_FAILURES_FOR_INCIDENT).toBe(3);
+    });
+  });
+
+  describe('AUTH_COOKIES and AUTH_EXPIRY', () => {
+    it('should define distinct cookie names', () => {
+      expect(AUTH_COOKIES.ACCESS_TOKEN).toBe('devpulse_access_token');
+      expect(AUTH_COOKIES.REFRESH_TOKEN).toBe('devpulse_refresh_token');
+      expect(AUTH_COOKIES.ACCESS_TOKEN).not.toBe(AUTH_COOKIES.REFRESH_TOKEN);
+    });
+
+    it('should define reasonable expiration times', () => {
+      expect(AUTH_EXPIRY.ACCESS_TOKEN_MS).toBe(15 * 60 * 1000);
+      expect(AUTH_EXPIRY.REFRESH_TOKEN_MS).toBe(7 * 24 * 60 * 60 * 1000);
+      expect(AUTH_EXPIRY.ACCESS_TOKEN_MS).toBeLessThan(AUTH_EXPIRY.REFRESH_TOKEN_MS);
+    });
+  });
+
+  describe('SECURITY_CONFIG', () => {
+    it('should enforce secure password and hashing parameters', () => {
+      expect(SECURITY_CONFIG.MIN_PASSWORD_LENGTH).toBe(8);
+      expect(SECURITY_CONFIG.MAX_PASSWORD_LENGTH).toBe(128);
+      expect(SECURITY_CONFIG.BCRYPT_SALT_ROUNDS).toBeGreaterThanOrEqual(10);
+      expect(SECURITY_CONFIG.CSRF_HEADER_NAME).toBe('x-devpulse-csrf');
     });
   });
 

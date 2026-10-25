@@ -4,7 +4,8 @@
   "private": true,
   "description": "DevPulse — API Uptime Monitoring and Incident Management Platform",
   "scripts": {
-    "dev": "concurrently -n \"web,api,worker\" -c \"cyan,blue,magenta\" \"pnpm --filter web dev\" \"pnpm --filter api start:dev\" \"pnpm --filter api start:worker:dev\"",
+    "predev": "pnpm --filter @devpulse/api build",
+    "dev": "concurrently -k --kill-others-on-fail -n \"web,api,worker\" -c \"cyan,blue,magenta\" \"pnpm --filter web dev\" \"pnpm --filter api start:dev\" \"pnpm --filter api start:worker:dev\"",
     "dev:web": "pnpm --filter web dev",
     "dev:api": "pnpm --filter api start:dev",
     "dev:worker": "pnpm --filter api start:worker:dev",

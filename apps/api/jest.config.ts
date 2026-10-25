@@ -10,6 +10,7 @@ const config: Config = {
   collectCoverageFrom: ['src/**/*.(t|j)s'],
   coverageDirectory: './coverage',
   testEnvironment: 'node',
+  setupFiles: ['<rootDir>/test/setup-env.ts'],
   moduleNameMapper: {
     '^@devpulse/shared$': '<rootDir>/../../packages/shared/src/index.ts',
     '^@devpulse/prisma$': '<rootDir>/../../prisma/generated/client/client',

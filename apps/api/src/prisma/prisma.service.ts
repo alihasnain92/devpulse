@@ -1,3 +1,4 @@
+import '../env';
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { PrismaClient } from '@devpulse/prisma';
 import { PrismaPg } from '@prisma/adapter-pg';

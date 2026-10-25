@@ -18,5 +18,6 @@
       "@devpulse/prisma": ["../../prisma/generated/client/client"]
     }
   },
-  "include": ["src/**/*", "../../prisma/generated/client/**/*"]
+  "include": ["src/**/*", "../../prisma/generated/client/**/*"],
+  "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
 }

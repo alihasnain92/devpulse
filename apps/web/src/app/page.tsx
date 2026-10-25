@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -75,12 +76,16 @@ export default function Home() {
 
         {/* Action Buttons */}
         <div className="flex gap-4 pt-4">
-          <Button size="lg" className="font-semibold">
-            Get Started
-          </Button>
-          <Button variant="outline" size="lg" className="font-semibold">
-            Documentation
-          </Button>
+          <Link href="/register">
+            <Button size="lg" className="font-semibold">
+              Get Started
+            </Button>
+          </Link>
+          <Link href="/login">
+            <Button variant="outline" size="lg" className="font-semibold">
+              Sign in
+            </Button>
+          </Link>
         </div>
       </div>
     </main>
