@@ -17,6 +17,7 @@ export interface CheckExecutionResult {
   finalUrl: string;
   redirectHops: number;
   resolvedIp: string | null;
+  executedAt: Date;
 }
 
 @Injectable()
@@ -32,6 +33,7 @@ export class MonitoringHttpClientService {
     timeoutMs = 10000,
     expectedStatus = 200,
     dnsLookupFn?: DnsLookupFunction,
+    executedAt: Date = new Date(),
   ): Promise<CheckExecutionResult> {
     const startTime = performance.now();
     let currentUrlStr = rawUrl;
@@ -98,6 +100,7 @@ export class MonitoringHttpClientService {
           finalUrl: currentUrlStr,
           redirectHops,
           resolvedIp: lastResolvedIp,
+          executedAt,
         };
       }
     } catch (err) {
@@ -112,6 +115,7 @@ export class MonitoringHttpClientService {
         finalUrl: currentUrlStr,
         redirectHops,
         resolvedIp: lastResolvedIp,
+        executedAt,
       };
     }
   }

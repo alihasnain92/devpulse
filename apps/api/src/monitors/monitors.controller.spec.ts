@@ -1,8 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { HttpMethod, MonitorDto } from '@devpulse/shared';
+import { HttpMethod, MonitorDto, IncidentDto } from '@devpulse/shared';
 import { MonitorsController } from './monitors.controller';
 import { MonitorsService } from './monitors.service';
 import { MonitoringService } from '../monitoring/monitoring.service';
+import { IncidentsService } from '../incidents/incidents.service';
 import { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 
 describe('MonitorsController (Unit)', () => {
@@ -18,6 +19,9 @@ describe('MonitorsController (Unit)', () => {
     enqueueManualCheck: jest.Mock;
     getRecentChecks: jest.Mock;
     getLatestCheck: jest.Mock;
+  };
+  let incidentsService: {
+    findAllForMonitor: jest.Mock;
   };
 
   const mockUser: AuthenticatedUser = {
@@ -55,6 +59,10 @@ describe('MonitorsController (Unit)', () => {
       getLatestCheck: jest.fn(),
     };
 
+    incidentsService = {
+      findAllForMonitor: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [MonitorsController],
       providers: [
@@ -65,6 +73,10 @@ describe('MonitorsController (Unit)', () => {
         {
           provide: MonitoringService,
           useValue: monitoringService,
+        },
+        {
+          provide: IncidentsService,
+          useValue: incidentsService,
         },
       ],
     }).compile();
@@ -191,5 +203,43 @@ describe('MonitorsController (Unit)', () => {
       'user-abc',
     );
     expect(result).toBe(mockCheck);
+  });
+
+  it('getMonitorIncidents should call incidentsService.findAllForMonitor with parsed parameters', async () => {
+    const mockIncidents: IncidentDto[] = [
+      {
+        id: 'inc-1',
+        monitorId: 'mon-1',
+        monitorName: 'Main Website',
+        state: 'ongoing',
+        startedAt: '2026-10-26T12:00:00.000Z',
+        resolvedAt: null,
+        durationMs: 45000,
+        durationSeconds: 45,
+        cause: 'HTTP 500',
+        isResolved: false,
+        isSeeded: false,
+      },
+    ];
+    incidentsService.findAllForMonitor.mockResolvedValue(mockIncidents);
+
+    const result = await controller.getMonitorIncidents(
+      mockUser,
+      'mon-1',
+      'active',
+      '10',
+      '0',
+    );
+
+    expect(incidentsService.findAllForMonitor).toHaveBeenCalledWith(
+      'mon-1',
+      'user-abc',
+      {
+        status: 'active',
+        limit: 10,
+        offset: 0,
+      },
+    );
+    expect(result).toEqual(mockIncidents);
   });
 });

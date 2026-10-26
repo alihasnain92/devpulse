@@ -3,7 +3,7 @@
 import React, { useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CheckResultDto, MonitorDto } from '@devpulse/shared';
+import { CheckResultDto, IncidentDto, MonitorDto } from '@devpulse/shared';
 import { apiClient } from '@/lib/api-client';
 import { Navbar } from '@/components/navbar';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,16 @@ import {
   Zap,
 } from 'lucide-react';
 
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.max(1, seconds)}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins < 60) return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const remainingMins = mins % 60;
+  return `${hours}h ${remainingMins}m`;
+}
+
 interface MonitorDetailPageProps {
   params: Promise<{ id: string }>;
 }
@@ -45,6 +55,7 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
   const [monitor, setMonitor] = useState<MonitorDto | null>(null);
   const [latestCheck, setLatestCheck] = useState<CheckResultDto | null>(null);
   const [recentChecks, setRecentChecks] = useState<CheckResultDto[]>([]);
+  const [incidents, setIncidents] = useState<IncidentDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isToggling, setIsToggling] = useState(false);
@@ -58,12 +69,14 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
 
   const fetchChecks = async (monitorId: string) => {
     try {
-      const [latest, history] = await Promise.all([
+      const [latest, history, monitorIncidents] = await Promise.all([
         apiClient.getLatestCheck(monitorId).catch(() => null),
         apiClient.getChecks(monitorId, 10).catch(() => []),
+        apiClient.getMonitorIncidents(monitorId).catch(() => []),
       ]);
       setLatestCheck(latest);
       setRecentChecks(history);
+      setIncidents(monitorIncidents);
     } catch {
       // Non-blocking telemetry fetch
     }
@@ -258,6 +271,50 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
             </button>
           </div>
         )}
+
+        {/* Active Outage Alert Banner */}
+        {(() => {
+          const activeIncident = incidents.find((i) => !i.isResolved);
+          if (!activeIncident) return null;
+          const elapsed = Math.max(
+            0,
+            Math.floor((Date.now() - new Date(activeIncident.startedAt).getTime()) / 1000),
+          );
+
+          return (
+            <div className="rounded-xl border border-red-500/40 bg-red-950/30 p-4 sm:p-5 flex items-start gap-4">
+              <div className="flex h-3 w-3 relative mt-1 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+              </div>
+              <div className="space-y-1.5 flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-red-300">
+                    Active Service Outage Detected
+                  </span>
+                  <Badge
+                    variant="destructive"
+                    className="bg-red-900/60 text-red-200 text-xs uppercase"
+                  >
+                    Ongoing Outage
+                  </Badge>
+                </div>
+                <div className="text-xs text-slate-300 leading-relaxed font-mono bg-red-950/60 p-2.5 rounded border border-red-900/50 break-all">
+                  {activeIncident.cause}
+                </div>
+                <div className="text-xs text-slate-400 flex flex-wrap items-center gap-3 pt-0.5">
+                  <span>
+                    Started: {new Date(activeIncident.startedAt).toLocaleString()}
+                  </span>
+                  <span>•</span>
+                  <span>Downtime Duration: {formatDuration(elapsed)}</span>
+                  <span>•</span>
+                  <span>Triggered by 3 consecutive check failures</span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Top Header Card */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
@@ -629,28 +686,96 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
           </CardContent>
         </Card>
 
-        {/* Incident History Notice */}
+        {/* Incident History Table */}
         <Card className="border-slate-800 bg-slate-900/50 shadow-md">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-lg text-white">Incident History</CardTitle>
                 <CardDescription className="text-slate-400">
-                  Automated incident lifecycle tracking and notification alerts
+                  Automated incident lifecycle tracking and outage duration logs
                 </CardDescription>
               </div>
               <Badge
                 variant="outline"
-                className="border-slate-700 text-slate-400 text-xs"
+                className="border-slate-700 text-slate-300 text-xs"
               >
-                Phase 4 Feature
+                {incidents.length} {incidents.length === 1 ? 'Incident' : 'Incidents'}
               </Badge>
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Automatic incident creation on consecutive check failures (threshold: 3), alert dispatching, and recovery workflows will be enabled in Phase 4.
-            </p>
+            {incidents.length === 0 ? (
+              <div className="text-center py-8 space-y-2">
+                <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto" />
+                <div className="text-sm font-medium text-white">No incidents recorded</div>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  This monitor has not breached the 3-consecutive-failure threshold. All outages are automatically tracked and resolved here.
+                </p>
+              </div>
+            ) : (
+              <div className="border border-slate-800 rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 font-medium">
+                      <tr>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 px-3">Failure Cause</th>
+                        <th className="py-2.5 px-3">Started At</th>
+                        <th className="py-2.5 px-3">Resolved At</th>
+                        <th className="py-2.5 px-3">Duration</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {incidents.map((inc) => {
+                        const isOngoing = !inc.isResolved;
+                        const elapsed = isOngoing
+                          ? Math.max(0, Math.floor((Date.now() - new Date(inc.startedAt).getTime()) / 1000))
+                          : inc.durationSeconds;
+
+                        return (
+                          <tr key={inc.id} className="hover:bg-slate-900/30">
+                            <td className="py-2.5 px-3">
+                              {isOngoing ? (
+                                <Badge
+                                  variant="destructive"
+                                  className="text-[9px] uppercase font-bold px-1.5 py-0 bg-red-950 text-red-400 border border-red-800/60"
+                                >
+                                  Ongoing
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[9px] uppercase font-bold px-1.5 py-0 border-emerald-500/30 text-emerald-400"
+                                >
+                                  Resolved
+                                </Badge>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-slate-300 max-w-xs truncate">
+                              {inc.cause}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-400">
+                              {new Date(inc.startedAt).toLocaleString()}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-400">
+                              {inc.resolvedAt
+                                ? new Date(inc.resolvedAt).toLocaleString()
+                                : 'Ongoing Outage'}
+                            </td>
+                            <td className="py-2.5 px-3 font-medium">
+                              <span className={isOngoing ? 'text-red-400' : 'text-slate-300'}>
+                                {formatDuration(elapsed)}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </main>

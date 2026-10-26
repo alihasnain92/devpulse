@@ -11,6 +11,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { MonitoringHttpClientService } from './http/monitoring-http-client.service';
 import { SchedulerService } from './queue/scheduler.service';
+import { IncidentsService } from '../incidents/incidents.service';
 
 interface PrismaCheckResultRecord {
   id: string;
@@ -32,17 +33,19 @@ export class MonitoringService {
     private readonly prisma: PrismaService,
     private readonly httpClient: MonitoringHttpClientService,
     private readonly schedulerService: SchedulerService,
+    private readonly incidentsService: IncidentsService,
   ) {}
 
   /**
-   * Executes a monitor check with full pre-check protection and idempotent persistence.
-   * Discards execution without any network traffic if the monitor is paused or deleted.
+   * Executes a monitor check with full pre-check protection, serialized
+   * row-level locking concurrency control, idempotent persistence, and atomic
+   * incident evaluation.
    */
   async runMonitorCheck(
     monitorId: string,
     jobId?: string,
   ): Promise<CheckResultDto | null> {
-    // 1. Pre-check: Fetch monitor and verify active state
+    // 1. Pre-check: Fetch monitor and verify active state before network call
     const monitor = await this.prisma.monitor.findUnique({
       where: { id: monitorId },
     });
@@ -87,24 +90,76 @@ export class MonitoringService {
     const isSuccess =
       !execution.errorMessage && execution.statusCode === monitor.expectedStatus;
 
+    // 4. Atomic Transaction with Row-Level Lock on Monitor to serialize check evaluation
     try {
-      const created = await this.prisma.checkResult.create({
-        data: {
-          monitorId: monitor.id,
-          statusCode: execution.statusCode ?? null,
-          latencyMs: Math.round(execution.latencyMs),
-          isSuccess,
-          errorMessage: execution.errorMessage ?? null,
-          jobId: jobId ?? null,
+      return await this.prisma.$transaction(
+        async (tx: any) => {
+          // Acquire exclusive row-level lock on the monitor to serialize all concurrent checks
+          const lockedMonitors: {
+            id: string;
+            isPaused: boolean;
+            expectedStatus: number;
+          }[] = await tx.$queryRaw`
+            SELECT id, "isPaused", "expectedStatus" FROM "monitors" WHERE id = ${monitor.id} FOR UPDATE
+          `;
+
+          if (!lockedMonitors || lockedMonitors.length === 0) {
+            this.logger.warn(
+              `Post-execution check aborted: Monitor ${monitorId} was deleted while check was in-flight.`,
+            );
+            return null;
+          }
+
+          const lockedMonitor = lockedMonitors[0];
+          if (lockedMonitor.isPaused) {
+            this.logger.log(
+              `Post-execution check aborted: Monitor ${monitorId} was paused while check was in-flight. Skipping persistence.`,
+            );
+            return null;
+          }
+
+          // Re-verify jobId within transaction to guard against concurrent retry races
+          if (jobId) {
+            const existingJob = await tx.checkResult.findUnique({
+              where: { jobId },
+            });
+            if (existingJob) {
+              return this.formatCheckResult(
+                existingJob as unknown as PrismaCheckResultRecord,
+              );
+            }
+          }
+
+          // Persist check result with explicit execution-start timestamp
+          const created = await tx.checkResult.create({
+            data: {
+              monitorId: monitor.id,
+              statusCode: execution.statusCode ?? null,
+              latencyMs: Math.round(execution.latencyMs),
+              isSuccess,
+              errorMessage: execution.errorMessage ?? null,
+              jobId: jobId ?? null,
+              checkedAt: execution.executedAt ?? new Date(),
+            },
+          });
+
+          this.logger.log(
+            `Recorded check for monitor ${monitor.id}: status=${execution.statusCode ?? 'ERR'}, latency=${Math.round(execution.latencyMs)}ms, success=${isSuccess}`,
+          );
+
+          // Atomic Incident Transition Evaluation
+          await this.incidentsService.evaluateIncidentTransition(
+            tx,
+            monitor.id,
+            created,
+            lockedMonitor.expectedStatus,
+          );
+
+          return this.formatCheckResult(
+            created as unknown as PrismaCheckResultRecord,
+          );
         },
-      });
-
-      this.logger.log(
-        `Recorded check for monitor ${monitor.id}: status=${execution.statusCode ?? 'ERR'}, latency=${Math.round(execution.latencyMs)}ms, success=${isSuccess}`,
-      );
-
-      return this.formatCheckResult(
-        created as unknown as PrismaCheckResultRecord,
+        { timeout: 15000 },
       );
     } catch (err: unknown) {
       // Handle potential race condition on unique constraint for jobId

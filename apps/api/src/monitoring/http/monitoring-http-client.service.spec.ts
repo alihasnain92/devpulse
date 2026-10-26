@@ -215,5 +215,20 @@ describe('MonitoringHttpClientService (Unit & Transport Security)', () => {
       // Should contain clean error code like DNS_RESOLUTION_FAILED
       expect(result.errorMessage).toMatch(/(DNS_RESOLUTION_FAILED|NETWORK_ERROR)/);
     });
+
+    it('should capture and return explicit execution start timestamp (executedAt)', async () => {
+      const explicitStartTime = new Date('2026-10-26T12:00:00.000Z');
+      const result = await service.executeCheck(
+        'https://invalid-nonexistent-subdomain-12345.devpulse.dev/health',
+        HttpMethod.GET,
+        1000,
+        200,
+        undefined,
+        explicitStartTime,
+      );
+
+      expect(result.executedAt).toBeInstanceOf(Date);
+      expect(result.executedAt.toISOString()).toBe(explicitStartTime.toISOString());
+    });
   });
 });

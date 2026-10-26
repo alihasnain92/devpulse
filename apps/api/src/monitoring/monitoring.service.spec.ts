@@ -5,6 +5,7 @@ import { MonitoringService } from './monitoring.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MonitoringHttpClientService } from './http/monitoring-http-client.service';
 import { SchedulerService } from './queue/scheduler.service';
+import { IncidentsService } from '../incidents/incidents.service';
 
 describe('MonitoringService (Unit)', () => {
   let service: MonitoringService;
@@ -19,12 +20,23 @@ describe('MonitoringService (Unit)', () => {
       findMany: jest.Mock;
       create: jest.Mock;
     };
+    $transaction: jest.Mock;
+  };
+  let txMock: {
+    $queryRaw: jest.Mock;
+    checkResult: {
+      findUnique: jest.Mock;
+      create: jest.Mock;
+    };
   };
   let httpClient: {
     executeCheck: jest.Mock;
   };
   let schedulerService: {
     enqueueManualCheck: jest.Mock;
+  };
+  let incidentsService: {
+    evaluateIncidentTransition: jest.Mock;
   };
 
   const mockDate = new Date('2026-10-26T12:00:00.000Z');
@@ -57,6 +69,16 @@ describe('MonitoringService (Unit)', () => {
   };
 
   beforeEach(async () => {
+    txMock = {
+      $queryRaw: jest.fn().mockResolvedValue([
+        { id: 'mon-1', isPaused: false, expectedStatus: 200 },
+      ]),
+      checkResult: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+    };
+
     prisma = {
       monitor: {
         findUnique: jest.fn(),
@@ -68,6 +90,7 @@ describe('MonitoringService (Unit)', () => {
         findMany: jest.fn(),
         create: jest.fn(),
       },
+      $transaction: jest.fn().mockImplementation((callback) => callback(txMock)),
     };
 
     httpClient = {
@@ -76,6 +99,10 @@ describe('MonitoringService (Unit)', () => {
 
     schedulerService = {
       enqueueManualCheck: jest.fn(),
+    };
+
+    incidentsService = {
+      evaluateIncidentTransition: jest.fn().mockResolvedValue(null),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -93,6 +120,10 @@ describe('MonitoringService (Unit)', () => {
           provide: SchedulerService,
           useValue: schedulerService,
         },
+        {
+          provide: IncidentsService,
+          useValue: incidentsService,
+        },
       ],
     }).compile();
 
@@ -107,7 +138,7 @@ describe('MonitoringService (Unit)', () => {
 
       expect(result).toBeNull();
       expect(httpClient.executeCheck).not.toHaveBeenCalled();
-      expect(prisma.checkResult.create).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('should abort cleanly without HTTP request if monitor is paused (pre-check protection)', async () => {
@@ -120,10 +151,10 @@ describe('MonitoringService (Unit)', () => {
 
       expect(result).toBeNull();
       expect(httpClient.executeCheck).not.toHaveBeenCalled();
-      expect(prisma.checkResult.create).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('should execute outbound check, determine success matching expectedStatus, and persist result', async () => {
+    it('should execute outbound check, determine success, persist in transaction, and evaluate incidents', async () => {
       prisma.monitor.findUnique.mockResolvedValue(mockMonitor);
       httpClient.executeCheck.mockResolvedValue({
         statusCode: 200,
@@ -133,8 +164,9 @@ describe('MonitoringService (Unit)', () => {
         finalUrl: 'https://api.example.com/health',
         redirectHops: 0,
         resolvedIp: '93.184.216.34',
+        executedAt: mockDate,
       });
-      prisma.checkResult.create.mockResolvedValue({
+      txMock.checkResult.create.mockResolvedValue({
         id: 'chk-created',
         monitorId: 'mon-1',
         statusCode: 200,
@@ -154,7 +186,9 @@ describe('MonitoringService (Unit)', () => {
         mockMonitor.timeoutMs,
         mockMonitor.expectedStatus,
       );
-      expect(prisma.checkResult.create).toHaveBeenCalledWith({
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(txMock.$queryRaw).toHaveBeenCalled();
+      expect(txMock.checkResult.create).toHaveBeenCalledWith({
         data: {
           monitorId: 'mon-1',
           statusCode: 200,
@@ -162,14 +196,21 @@ describe('MonitoringService (Unit)', () => {
           isSuccess: true,
           errorMessage: null,
           jobId: null,
+          checkedAt: mockDate,
         },
       });
+      expect(incidentsService.evaluateIncidentTransition).toHaveBeenCalledWith(
+        txMock,
+        'mon-1',
+        expect.objectContaining({ id: 'chk-created' }),
+        200,
+      );
       expect(result?.isSuccess).toBe(true);
       expect(result?.statusCode).toBe(200);
       expect(result?.latencyMs).toBe(145);
     });
 
-    it('should record failure when status code does not match expected status', async () => {
+    it('should record failure when status code does not match expected status and evaluate incidents', async () => {
       prisma.monitor.findUnique.mockResolvedValue(mockMonitor);
       httpClient.executeCheck.mockResolvedValue({
         statusCode: 503,
@@ -179,8 +220,9 @@ describe('MonitoringService (Unit)', () => {
         finalUrl: 'https://api.example.com/health',
         redirectHops: 0,
         resolvedIp: '93.184.216.34',
+        executedAt: mockDate,
       });
-      prisma.checkResult.create.mockResolvedValue({
+      txMock.checkResult.create.mockResolvedValue({
         id: 'chk-503',
         monitorId: 'mon-1',
         statusCode: 503,
@@ -194,12 +236,13 @@ describe('MonitoringService (Unit)', () => {
 
       const result = await service.runMonitorCheck('mon-1');
 
-      expect(prisma.checkResult.create).toHaveBeenCalledWith({
+      expect(txMock.checkResult.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           statusCode: 503,
           isSuccess: false,
         }),
       });
+      expect(incidentsService.evaluateIncidentTransition).toHaveBeenCalled();
       expect(result?.isSuccess).toBe(false);
       expect(result?.statusCode).toBe(503);
     });
@@ -214,8 +257,9 @@ describe('MonitoringService (Unit)', () => {
         finalUrl: 'http://127.0.0.1:8080',
         redirectHops: 0,
         resolvedIp: '127.0.0.1',
+        executedAt: mockDate,
       });
-      prisma.checkResult.create.mockResolvedValue({
+      txMock.checkResult.create.mockResolvedValue({
         id: 'chk-err',
         monitorId: 'mon-1',
         statusCode: null,
@@ -234,7 +278,7 @@ describe('MonitoringService (Unit)', () => {
       expect(result?.statusCode).toBeNull();
     });
 
-    it('should enforce idempotency: return existing result if jobId already recorded', async () => {
+    it('should enforce idempotency: return existing result if jobId already recorded prior to check', async () => {
       prisma.monitor.findUnique.mockResolvedValue(mockMonitor);
       prisma.checkResult.findUnique.mockResolvedValue(mockCheckRecord);
 
@@ -243,37 +287,126 @@ describe('MonitoringService (Unit)', () => {
       expect(result?.id).toBe('chk-1');
       expect(result?.jobId).toBe('job-123');
       expect(httpClient.executeCheck).not.toHaveBeenCalled();
-      expect(prisma.checkResult.create).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('should handle race condition on unique jobId (P2002) gracefully', async () => {
+    it('should abort and return null if monitor is paused during check execution', async () => {
       prisma.monitor.findUnique.mockResolvedValue(mockMonitor);
-      // First check returns null (job not yet present)
-      prisma.checkResult.findUnique
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(mockCheckRecord);
+      httpClient.executeCheck.mockResolvedValue({
+        statusCode: 200,
+        latencyMs: 100,
+        isSuccess: true,
+        errorMessage: null,
+        finalUrl: 'https://example.com',
+        redirectHops: 0,
+        resolvedIp: '93.184.216.34',
+      });
+
+      // Locked monitor returns isPaused = true (paused while check was in-flight)
+      txMock.$queryRaw.mockResolvedValue([
+        { id: 'mon-1', isPaused: true, expectedStatus: 200 },
+      ]);
+
+      const result = await service.runMonitorCheck('mon-1');
+
+      expect(result).toBeNull();
+      expect(txMock.checkResult.create).not.toHaveBeenCalled();
+    });
+
+    it('should explicitly pass probe start timestamp (executedAt) into CheckResult.create as checkedAt', async () => {
+      const explicitProbeStart = new Date('2026-10-26T12:00:00.000Z');
+      prisma.monitor.findUnique.mockResolvedValue(mockMonitor);
+      httpClient.executeCheck.mockResolvedValue({
+        statusCode: 200,
+        latencyMs: 300,
+        isSuccess: true,
+        errorMessage: null,
+        finalUrl: 'https://example.com/api',
+        redirectHops: 0,
+        resolvedIp: '93.184.216.34',
+        executedAt: explicitProbeStart,
+      });
+
+      txMock.checkResult.create.mockResolvedValue({
+        id: 'chk-with-timestamp',
+        monitorId: 'mon-1',
+        statusCode: 200,
+        latencyMs: 300,
+        isSuccess: true,
+        errorMessage: null,
+        isSeeded: false,
+        jobId: null,
+        checkedAt: explicitProbeStart,
+      });
+
+      await service.runMonitorCheck('mon-1');
+
+      expect(txMock.checkResult.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          checkedAt: explicitProbeStart,
+        }),
+      });
+    });
+
+    it('should guarantee network operations execute strictly outside database transactions (order verification)', async () => {
+      prisma.monitor.findUnique.mockResolvedValue(mockMonitor);
+      const callSequence: string[] = [];
+
+      httpClient.executeCheck.mockImplementation(async () => {
+        callSequence.push('network:start');
+        // Simulate network latency
+        callSequence.push('network:end');
+        return {
+          statusCode: 200,
+          latencyMs: 150,
+          isSuccess: true,
+          errorMessage: null,
+          finalUrl: 'https://example.com',
+          redirectHops: 0,
+          resolvedIp: '93.184.216.34',
+          executedAt: new Date(),
+        };
+      });
+
+      prisma.$transaction.mockImplementation(async (callback) => {
+        callSequence.push('tx:begin');
+        const res = await callback(txMock);
+        callSequence.push('tx:commit');
+        return res;
+      });
+
+      txMock.checkResult.create.mockResolvedValue(mockCheckRecord);
+
+      await service.runMonitorCheck('mon-1');
+
+      expect(callSequence).toEqual([
+        'network:start',
+        'network:end',
+        'tx:begin',
+        'tx:commit',
+      ]);
+    });
+
+    it('should prevent duplicate check results when duplicate job execution occurs', async () => {
+      prisma.monitor.findUnique.mockResolvedValue(mockMonitor);
+      // Simulate race where jobId was already inserted while check was in-flight
+      txMock.checkResult.findUnique.mockResolvedValue(mockCheckRecord);
 
       httpClient.executeCheck.mockResolvedValue({
         statusCode: 200,
         latencyMs: 100,
         isSuccess: true,
         errorMessage: null,
-        finalUrl: 'https://api.example.com',
+        finalUrl: 'https://example.com',
         redirectHops: 0,
         resolvedIp: '93.184.216.34',
+        executedAt: new Date(),
       });
 
-      // Simultaneous write triggers unique constraint error
-      const p2002Error = Object.assign(
-        new Error('Unique constraint failed on jobId'),
-        { code: 'P2002' },
-      );
-      prisma.checkResult.create.mockRejectedValue(p2002Error);
+      const result = await service.runMonitorCheck('mon-1', 'job-concurrent-race');
 
-      const result = await service.runMonitorCheck('mon-1', 'job-123');
-
-      expect(result?.id).toBe('chk-1');
-      expect(result?.jobId).toBe('job-123');
+      expect(result?.id).toBe(mockCheckRecord.id);
+      expect(txMock.checkResult.create).not.toHaveBeenCalled();
     });
   });
 

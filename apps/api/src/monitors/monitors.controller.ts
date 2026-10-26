@@ -14,6 +14,7 @@ import {
 import {
   CheckResultDto,
   ImmediateCheckResponse,
+  IncidentDto,
   MonitorDto,
 } from '@devpulse/shared';
 import {
@@ -23,6 +24,7 @@ import {
 import { CsrfGuard } from '../auth/guards/csrf.guard';
 import { MonitorsService } from './monitors.service';
 import { MonitoringService } from '../monitoring/monitoring.service';
+import { IncidentsService } from '../incidents/incidents.service';
 import { CreateMonitorDto } from './dto/create-monitor.dto';
 import { UpdateMonitorDto } from './dto/update-monitor.dto';
 
@@ -32,6 +34,7 @@ export class MonitorsController {
   constructor(
     private readonly monitorsService: MonitorsService,
     private readonly monitoringService: MonitoringService,
+    private readonly incidentsService: IncidentsService,
   ) {}
 
   @Post()
@@ -104,5 +107,23 @@ export class MonitorsController {
     @Param('id') id: string,
   ): Promise<CheckResultDto | null> {
     return this.monitoringService.getLatestCheck(id, user.id);
+  }
+
+  @Get(':id/incidents')
+  @HttpCode(HttpStatus.OK)
+  async getMonitorIncidents(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Query('status') status?: 'active' | 'resolved' | 'all',
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ): Promise<IncidentDto[]> {
+    const parsedLimit = limit ? parseInt(limit, 10) : 20;
+    const parsedOffset = offset ? parseInt(offset, 10) : 0;
+    return this.incidentsService.findAllForMonitor(id, user.id, {
+      status,
+      limit: parsedLimit,
+      offset: parsedOffset,
+    });
   }
 }

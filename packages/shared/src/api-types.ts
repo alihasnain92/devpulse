@@ -77,11 +77,17 @@ export interface CheckResultDto {
   checkedAt: string;
 }
 
+export type IncidentState = 'ongoing' | 'resolved';
+
 export interface IncidentDto {
   id: string;
   monitorId: string;
+  monitorName?: string;
+  state: IncidentState;
   startedAt: string;
   resolvedAt: string | null;
+  durationMs: number;
+  durationSeconds: number;
   cause: string;
   isResolved: boolean;
   isSeeded: boolean;

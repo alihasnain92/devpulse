@@ -3,6 +3,7 @@ import {
   CheckResultDto,
   CreateMonitorRequestDto,
   ImmediateCheckResponse,
+  IncidentDto,
   LoginRequestDto,
   MessageResponseDto,
   MonitorDto,
@@ -171,5 +172,40 @@ export const apiClient = {
   async getChecks(id: string, limit?: number): Promise<CheckResultDto[]> {
     const query = limit ? `?limit=${limit}` : '';
     return request<CheckResultDto[]>(`/monitors/${id}/checks${query}`);
+  },
+
+  async getIncidents(params?: {
+    status?: 'active' | 'resolved' | 'all';
+    limit?: number;
+    offset?: number;
+  }): Promise<IncidentDto[]> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return request<IncidentDto[]>(`/incidents${qs ? `?${qs}` : ''}`);
+  },
+
+  async getMonitorIncidents(
+    monitorId: string,
+    params?: {
+      status?: 'active' | 'resolved' | 'all';
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<IncidentDto[]> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return request<IncidentDto[]>(
+      `/monitors/${monitorId}/incidents${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  async getIncident(id: string): Promise<IncidentDto> {
+    return request<IncidentDto>(`/incidents/${id}`);
   },
 };
