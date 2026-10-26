@@ -1,4 +1,4 @@
-import { HttpMethod } from './constants';
+import { ApiKeyScope, HttpMethod, WebhookEventType } from './constants';
 
 export interface HealthResponse {
   status: 'ok';
@@ -138,4 +138,59 @@ export interface DashboardSummaryDto {
   activeIncidents: number;
   systemUptime24h: number | null;
   isDemo?: boolean;
+}
+
+export interface WebhookEndpointDto {
+  id: string;
+  userId: string;
+  name: string;
+  url: string;
+  description: string | null;
+  events: WebhookEventType[];
+  isEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateWebhookRequestDto {
+  name: string;
+  url: string;
+  description?: string;
+  events: WebhookEventType[];
+}
+
+export interface UpdateWebhookRequestDto {
+  name?: string;
+  url?: string;
+  description?: string;
+  events?: WebhookEventType[];
+  isEnabled?: boolean;
+}
+
+export interface WebhookCreatedResponseDto {
+  endpoint: WebhookEndpointDto;
+  signingSecret: string;
+}
+
+export interface ApiKeyDto {
+  id: string;
+  userId: string;
+  name: string;
+  keyPrefix: string;
+  scopes: ApiKeyScope[];
+  isRevoked: boolean;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateApiKeyRequestDto {
+  name: string;
+  scopes: ApiKeyScope[];
+}
+
+export interface ApiKeyCreatedResponseDto {
+  apiKey: ApiKeyDto;
+  rawKey: string;
 }

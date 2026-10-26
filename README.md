@@ -128,6 +128,22 @@ Database connections are protected against exhaustion:
 - **Isolated Synthetic Telemetry**: Includes a deterministic seeder (`pnpm db:seed`) generating 4 realistic monitors, 1,776 historical checks, and 2 resolved incidents under a dedicated demo account.
 - **Clean Telemetry Separation**: Synthetic records marked `isSeeded: true` are strictly isolated to the showcase user (`demo@devpulse.dev`). Real user accounts calculate metrics exclusively from authentic outbound probes, preventing synthetic contamination even under manual query manipulation.
 
+### 6. Webhook Registration & Cryptographic Signatures (Level 2, Phase 7)
+- **Endpoint Configuration**: Each webhook endpoint contains a human-readable identifier (`name`, 1–100 characters, trimmed), destination URL, optional context (`description`, up to 255 characters), event subscriptions (`events`), active status toggle (`isEnabled`), and a one-time signing secret (`whsec_...`).
+- **Granular Event Subscriptions**: Supports endpoint registration for `incident.created` and `incident.resolved` events with user-scoped isolation and active/disabled toggle.
+- **Static SSRF Validation**: Rejects invalid protocols, private subnets (RFC 1918), loopback, link-local, and cloud metadata addresses statically at registration time without initiating network lookups.
+- **Cryptographic Secret Storage**: Signing secrets are generated as `whsec_` prefixed 256-bit entropy keys, encrypted at rest via AES-256-GCM using `WEBHOOK_ENCRYPTION_KEY` with randomized 12-byte initialization vectors and 16-byte authentication tags.
+- **Versioned HMAC Signatures**: Outbound signatures follow the standard `x-devpulse-signature: t=${timestamp},v1=${signature}` specification, calculated as `HMAC-SHA256("${timestamp}.${payload}", secret)` with constant-time equality checks and a 300-second replay tolerance window.
+- **Zero Secret Exposure**: Secrets are revealed strictly once in the creation modal; all subsequent read, list, and update responses omit the secret entirely.
+
+### 7. Scoped API Keys & Programmatic Access (Level 2, Phase 7)
+- **High-Entropy Keys**: Programmatic keys formatted as `dp_live_` + 40-character random base62/alphanumeric tokens (~240 bits entropy).
+- **One-Way SHA-256 Hashing**: Secret key tokens are never stored plaintext. Only their SHA-256 hash (`keyHash`) and a 16-character non-secret display prefix (`dp_live_abcd...`) are persisted.
+- **Additive Dual-Mode Authentication**: Endpoints accept either ambient session cookies or programmatic API keys via `x-api-key: dp_live_...` or `Authorization: Bearer dp_live_...`.
+- **Explicit Least-Privilege Scoping**: Granular scope enforcement (`monitors:read`, `monitors:write`, `incidents:read`, `webhooks:read`, `webhooks:write`) via `@RequireScopes()` decorators and global guard evaluation.
+- **Automated CSRF Exemption**: Programmatic API key requests without ambient browser session cookies are exempt from CSRF checks while retaining strict origin/cookie security for browser clients.
+- **Usage Auditing**: Automatically records asynchronous `lastUsedAt` timestamps on each successful invocation without delaying request latency.
+
 ---
 
 ## Showcase Quick Start
@@ -151,6 +167,9 @@ Copy `.env.example` to `.env`:
 cp .env.example .env
 ```
 *(On Windows PowerShell: `Copy-Item .env.example .env`)*
+
+> [!NOTE]
+> `.env.example` provides default development values, including `WEBHOOK_ENCRYPTION_KEY` (a 32-byte hex string used for AES-256-GCM encryption of webhook signing secrets). For production deployments, generate a unique key using `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
 
 ### 4. Start Infrastructure Containers
 Start PostgreSQL 16 (port 5433) and Redis 7 (port 6379):
@@ -233,11 +252,21 @@ All integration and smoke tests dynamically reroute database connections to `dev
 3. **Resilience & Rate Limiting**:
    - Outbound probe timeouts (1-30s) and max response payload limits (100KB).
    - Structured error handling with zero internal stack trace exposure.
+4. **Webhook Security & HMAC Verification**:
+   - Webhook signing secrets are encrypted at rest with AES-256-GCM.
+   - Outbound delivery headers include `x-devpulse-signature: t=${timestamp},v1=${signature}` computed using HMAC-SHA256.
+   - Built-in constant-time signature verification with a 300-second replay tolerance window.
+5. **Programmatic API Keys**:
+   - High-entropy tokens (`dp_live_...`) with one-way SHA-256 hashing at rest.
+   - Scope-based access control with least-privilege principles (`monitors:read`, `monitors:write`, `incidents:read`, `webhooks:read`, `webhooks:write`).
+   - CSRF exemption for programmatic API key requests without ambient browser session cookies.
 
 ---
 
 ## Level 2 Roadmap & Future Enhancements
 
+- [x] **Webhook Registration & Security (Phase 7)**: User-managed webhooks, AES-256-GCM secret encryption, versioned HMAC-SHA256 signatures, and scoped programmatic API keys.
+- [ ] **Webhook Event Delivery Pipeline & Retry Engine (Phase 8)**: Asynchronous event queueing, exponential backoff retries, delivery attempt logs, and manual redelivery.
 - [ ] **Multi-Channel Alerting**: Native integrations for Slack webhooks, Discord webhooks, PagerDuty, and email alerts via SendGrid/SES.
 - [ ] **Multi-Region Monitoring Probes**: Distributed worker nodes running in US-East, EU-Central, and AP-East to detect regional outages.
 - [ ] **Public Status Pages**: White-label public status dashboards with incident post-mortems and custom domains.

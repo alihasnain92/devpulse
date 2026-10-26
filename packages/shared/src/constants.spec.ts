@@ -5,6 +5,10 @@ import {
   AUTH_EXPIRY,
   SECURITY_CONFIG,
   DEMO_CONFIG,
+  WEBHOOK_EVENT_TYPES,
+  WEBHOOK_CONFIG,
+  API_KEY_SCOPES,
+  API_KEY_CONFIG,
 } from './constants';
 
 describe('Shared Constants', () => {
@@ -64,6 +68,39 @@ describe('Shared Constants', () => {
   describe('DEMO_CONFIG', () => {
     it('should provide the standard demo email', () => {
       expect(DEMO_CONFIG.DEMO_USER_EMAIL).toBe('demo@devpulse.dev');
+    });
+  });
+
+  describe('Webhook & API Key Constants', () => {
+    it('should define explicit webhook event types', () => {
+      expect(WEBHOOK_EVENT_TYPES).toContain('incident.created');
+      expect(WEBHOOK_EVENT_TYPES).toContain('incident.resolved');
+      expect(WEBHOOK_EVENT_TYPES).toHaveLength(2);
+    });
+
+    it('should define webhook signature configuration', () => {
+      expect(WEBHOOK_CONFIG.SECRET_PREFIX).toBe('whsec_');
+      expect(WEBHOOK_CONFIG.SIGNATURE_HEADER_NAME).toBe('x-devpulse-signature');
+      expect(WEBHOOK_CONFIG.SIGNATURE_VERSION).toBe('v1');
+      expect(WEBHOOK_CONFIG.DEFAULT_TOLERANCE_SECONDS).toBe(300);
+      expect(WEBHOOK_CONFIG.MAX_ENDPOINTS_PER_USER).toBe(20);
+      expect(WEBHOOK_CONFIG.MAX_NAME_LENGTH).toBe(100);
+      expect(WEBHOOK_CONFIG.MAX_DESCRIPTION_LENGTH).toBe(255);
+    });
+
+    it('should define explicit least-privilege API key scopes', () => {
+      expect(API_KEY_SCOPES).toEqual([
+        'monitors:read',
+        'monitors:write',
+        'incidents:read',
+        'webhooks:read',
+        'webhooks:write',
+      ]);
+    });
+
+    it('should define API key configuration and prefix', () => {
+      expect(API_KEY_CONFIG.PREFIX).toBe('dp_live_');
+      expect(API_KEY_CONFIG.HEADER_NAME).toBe('x-api-key');
     });
   });
 });

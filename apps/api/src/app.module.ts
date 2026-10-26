@@ -9,7 +9,10 @@ import { MonitorsModule } from './monitors/monitors.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
 import { IncidentsModule } from './incidents/incidents.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
+import { ApiKeysModule } from './api-keys/api-keys.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { ApiKeyScopesGuard } from './api-keys/guards/api-key-scopes.guard';
 
 @Module({
   imports: [
@@ -27,11 +30,17 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     MonitoringModule,
     MonitorsModule,
     MetricsModule,
+    WebhooksModule,
+    ApiKeysModule,
   ],
   providers: [
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ApiKeyScopesGuard,
     },
   ],
 })

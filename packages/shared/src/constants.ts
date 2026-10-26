@@ -38,3 +38,37 @@ export const SECURITY_CONFIG = {
 export const DEMO_CONFIG = {
   DEMO_USER_EMAIL: 'demo@devpulse.dev',
 } as const;
+
+export const WEBHOOK_EVENT_TYPES = [
+  'incident.created',
+  'incident.resolved',
+] as const;
+
+export type WebhookEventType = (typeof WEBHOOK_EVENT_TYPES)[number];
+
+export const WEBHOOK_CONFIG = {
+  SECRET_PREFIX: 'whsec_',
+  SIGNATURE_HEADER_NAME: 'x-devpulse-signature',
+  SIGNATURE_VERSION: 'v1',
+  DEFAULT_TOLERANCE_SECONDS: 300, // 5 minutes
+  MAX_ENDPOINTS_PER_USER: 20,
+  MAX_NAME_LENGTH: 100,
+  MAX_DESCRIPTION_LENGTH: 255,
+} as const;
+
+export const API_KEY_SCOPES = [
+  'monitors:read',
+  'monitors:write',
+  'incidents:read',
+  'webhooks:read',
+  'webhooks:write',
+] as const;
+
+export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
+
+export const API_KEY_CONFIG = {
+  PREFIX: 'dp_live_',
+  HEADER_NAME: 'x-api-key',
+  DISPLAY_PREFIX_LENGTH: 12,
+  MAX_KEYS_PER_USER: 10,
+} as const;

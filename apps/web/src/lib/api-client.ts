@@ -1,7 +1,11 @@
 import {
+  ApiKeyCreatedResponseDto,
+  ApiKeyDto,
   AuthResponseDto,
   CheckResultDto,
+  CreateApiKeyRequestDto,
   CreateMonitorRequestDto,
+  CreateWebhookRequestDto,
   DashboardSummaryDto,
   ImmediateCheckResponse,
   IncidentDto,
@@ -13,7 +17,10 @@ import {
   SECURITY_CONFIG,
   StatsWindow,
   UpdateMonitorRequestDto,
+  UpdateWebhookRequestDto,
   UserDto,
+  WebhookCreatedResponseDto,
+  WebhookEndpointDto,
 } from '@devpulse/shared';
 
 const API_BASE_URL =
@@ -221,5 +228,67 @@ export const apiClient = {
 
   async getDashboardSummary(): Promise<DashboardSummaryDto> {
     return request<DashboardSummaryDto>('/monitors/dashboard/summary');
+  },
+
+  async getWebhooks(): Promise<WebhookEndpointDto[]> {
+    return request<WebhookEndpointDto[]>('/webhooks');
+  },
+
+  async getWebhook(id: string): Promise<WebhookEndpointDto> {
+    return request<WebhookEndpointDto>(`/webhooks/${id}`);
+  },
+
+  async createWebhook(
+    dto: CreateWebhookRequestDto,
+  ): Promise<WebhookCreatedResponseDto> {
+    return request<WebhookCreatedResponseDto>('/webhooks', {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    });
+  },
+
+  async updateWebhook(
+    id: string,
+    dto: UpdateWebhookRequestDto,
+  ): Promise<WebhookEndpointDto> {
+    return request<WebhookEndpointDto>(`/webhooks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(dto),
+    });
+  },
+
+  async deleteWebhook(
+    id: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return request<{ success: boolean; message: string }>(`/webhooks/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async getApiKeys(): Promise<ApiKeyDto[]> {
+    return request<ApiKeyDto[]>('/api-keys');
+  },
+
+  async createApiKey(
+    dto: CreateApiKeyRequestDto,
+  ): Promise<ApiKeyCreatedResponseDto> {
+    return request<ApiKeyCreatedResponseDto>('/api-keys', {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    });
+  },
+
+  async revokeApiKey(id: string): Promise<ApiKeyDto> {
+    return request<ApiKeyDto>(`/api-keys/${id}/revoke`, {
+      method: 'PATCH',
+    });
+  },
+
+  async deleteApiKey(
+    id: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return request<{ success: boolean; message: string }>(`/api-keys/${id}`, {
+      method: 'DELETE',
+    });
   },
 };

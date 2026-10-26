@@ -5,7 +5,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { SECURITY_CONFIG } from '@devpulse/shared';
+import { API_KEY_CONFIG, AUTH_COOKIES, SECURITY_CONFIG } from '@devpulse/shared';
 
 @Injectable()
 export class CsrfGuard implements CanActivate {
@@ -22,6 +22,22 @@ export class CsrfGuard implements CanActivate {
 
     // Safe read-only HTTP methods are exempt from CSRF checks
     if (['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      return true;
+    }
+
+    // Programmatic requests using API keys (and not relying on ambient session cookies)
+    // are exempt from CSRF checks, as custom headers cannot be forged cross-origin.
+    const hasApiKeyHeader =
+      Boolean(request.headers[API_KEY_CONFIG.HEADER_NAME]) ||
+      Boolean(
+        request.headers.authorization &&
+          request.headers.authorization.startsWith(`Bearer ${API_KEY_CONFIG.PREFIX}`),
+      );
+    const hasSessionCookie = Boolean(
+      request.cookies && request.cookies[AUTH_COOKIES.ACCESS_TOKEN],
+    );
+
+    if (hasApiKeyHeader && !hasSessionCookie) {
       return true;
     }
 

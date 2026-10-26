@@ -31,6 +31,7 @@ import { MetricsService } from '../metrics/metrics.service';
 import { CreateMonitorDto } from './dto/create-monitor.dto';
 import { UpdateMonitorDto } from './dto/update-monitor.dto';
 import { GetMonitorStatsDto } from '../metrics/dto/get-monitor-stats.dto';
+import { RequireScopes } from '../api-keys/decorators/require-scopes.decorator';
 
 @Controller('monitors')
 @UseGuards(CsrfGuard)
@@ -42,6 +43,7 @@ export class MonitorsController {
     private readonly metricsService: MetricsService,
   ) {}
 
+  @RequireScopes('monitors:write')
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(
@@ -51,12 +53,14 @@ export class MonitorsController {
     return this.monitorsService.create(user.id, dto);
   }
 
+  @RequireScopes('monitors:read')
   @Get()
   @HttpCode(HttpStatus.OK)
   async findAll(@CurrentUser() user: AuthenticatedUser): Promise<MonitorDto[]> {
     return this.monitorsService.findAll(user.id);
   }
 
+  @RequireScopes('monitors:read')
   @Get('dashboard/summary')
   @HttpCode(HttpStatus.OK)
   async getDashboardSummary(
@@ -65,6 +69,7 @@ export class MonitorsController {
     return this.metricsService.getDashboardSummary(user.id);
   }
 
+  @RequireScopes('monitors:read')
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   async findOne(
@@ -74,6 +79,7 @@ export class MonitorsController {
     return this.monitorsService.findOne(id, user.id);
   }
 
+  @RequireScopes('monitors:write')
   @Patch(':id')
   @HttpCode(HttpStatus.OK)
   async update(
@@ -84,6 +90,7 @@ export class MonitorsController {
     return this.monitorsService.update(id, user.id, dto);
   }
 
+  @RequireScopes('monitors:write')
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   async remove(
@@ -93,6 +100,7 @@ export class MonitorsController {
     return this.monitorsService.remove(id, user.id);
   }
 
+  @RequireScopes('monitors:write')
   @Post(':id/check')
   @HttpCode(HttpStatus.ACCEPTED)
   async triggerManualCheck(
@@ -102,6 +110,7 @@ export class MonitorsController {
     return this.monitoringService.enqueueManualCheck(id, user.id);
   }
 
+  @RequireScopes('monitors:read')
   @Get(':id/checks')
   @HttpCode(HttpStatus.OK)
   async getRecentChecks(
@@ -113,6 +122,7 @@ export class MonitorsController {
     return this.monitoringService.getRecentChecks(id, user.id, parsedLimit);
   }
 
+  @RequireScopes('monitors:read')
   @Get(':id/checks/latest')
   @HttpCode(HttpStatus.OK)
   async getLatestCheck(
@@ -122,6 +132,7 @@ export class MonitorsController {
     return this.monitoringService.getLatestCheck(id, user.id);
   }
 
+  @RequireScopes('monitors:read')
   @Get(':id/stats')
   @HttpCode(HttpStatus.OK)
   async getStats(
@@ -132,6 +143,7 @@ export class MonitorsController {
     return this.metricsService.getMonitorStats(id, user.id, query.window);
   }
 
+  @RequireScopes('incidents:read')
   @Get(':id/incidents')
   @HttpCode(HttpStatus.OK)
   async getMonitorIncidents(

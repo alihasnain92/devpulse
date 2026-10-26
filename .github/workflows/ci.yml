@@ -24,6 +24,7 @@ jobs:
       JWT_REFRESH_SECRET: devpulse_ci_test_jwt_refresh_secret_value
       JWT_ACCESS_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN: 7d
+      WEBHOOK_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 
     steps:
       - name: Checkout repository

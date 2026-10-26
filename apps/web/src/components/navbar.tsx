@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from './ui/button';
-import { Activity, LayoutDashboard, Radio, AlertTriangle, LogOut, Menu, X } from 'lucide-react';
+import { Activity, LayoutDashboard, Radio, AlertTriangle, Settings, LogOut, Menu, X } from 'lucide-react';
 
 export function Navbar() {
   const pathname = usePathname();
@@ -16,6 +16,7 @@ export function Navbar() {
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/monitors', label: 'Monitors', icon: Radio },
     { href: '/incidents', label: 'Incidents', icon: AlertTriangle },
+    { href: '/settings', label: 'Settings', icon: Settings },
   ];
 
   return (
