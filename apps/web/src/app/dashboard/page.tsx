@@ -224,7 +224,7 @@ export default function DashboardPage() {
             <div className="font-semibold text-blue-300 flex items-center gap-2">
               <span>DevPulse Level 1 Active: Monitoring, Incident Recovery & Analytics</span>
               <Badge variant="outline" className="border-blue-400/30 text-blue-300 text-xs">
-                Production Ready
+                Level 1 Complete
               </Badge>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">

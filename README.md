@@ -1,6 +1,6 @@
 # DevPulse — High-Precision API Uptime Monitoring & Incident Management Platform
 
-[![CI](https://github.com/devpulse/devpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/devpulse/devpulse/actions/workflows/ci.yml)
+[![CI](https://github.com/alihasnain92/devpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/alihasnain92/devpulse/actions/workflows/ci.yml)
 [![Node.js](https://img.shields.io/badge/node.js-%3E%3D22.0.0-green.svg)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-%3E%3D10.0.0-orange.svg)](https://pnpm.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
@@ -140,7 +140,7 @@ Ensure you have the following installed on your machine:
 
 ### 2. Clone & Install
 ```bash
-git clone https://github.com/devpulse/devpulse.git
+git clone https://github.com/alihasnain92/devpulse.git
 cd devpulse
 pnpm install
 ```

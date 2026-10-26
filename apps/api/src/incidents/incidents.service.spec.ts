@@ -168,6 +168,7 @@ describe('IncidentsService (Unit)', () => {
           isResolved: false,
           resolvedAt: null,
           cause: 'HTTP 503 response received (Expected 200)',
+          isSeeded: false,
         },
       });
 
