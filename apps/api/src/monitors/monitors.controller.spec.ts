@@ -1,9 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { HttpMethod, MonitorDto, IncidentDto } from '@devpulse/shared';
+import {
+  HttpMethod,
+  MonitorDto,
+  IncidentDto,
+  DashboardSummaryDto,
+  MonitorStatsDto,
+} from '@devpulse/shared';
 import { MonitorsController } from './monitors.controller';
 import { MonitorsService } from './monitors.service';
 import { MonitoringService } from '../monitoring/monitoring.service';
 import { IncidentsService } from '../incidents/incidents.service';
+import { MetricsService } from '../metrics/metrics.service';
 import { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 
 describe('MonitorsController (Unit)', () => {
@@ -22,6 +29,10 @@ describe('MonitorsController (Unit)', () => {
   };
   let incidentsService: {
     findAllForMonitor: jest.Mock;
+  };
+  let metricsService: {
+    getMonitorStats: jest.Mock;
+    getDashboardSummary: jest.Mock;
   };
 
   const mockUser: AuthenticatedUser = {
@@ -63,6 +74,11 @@ describe('MonitorsController (Unit)', () => {
       findAllForMonitor: jest.fn(),
     };
 
+    metricsService = {
+      getMonitorStats: jest.fn(),
+      getDashboardSummary: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [MonitorsController],
       providers: [
@@ -77,6 +93,10 @@ describe('MonitorsController (Unit)', () => {
         {
           provide: IncidentsService,
           useValue: incidentsService,
+        },
+        {
+          provide: MetricsService,
+          useValue: metricsService,
         },
       ],
     }).compile();
@@ -241,5 +261,54 @@ describe('MonitorsController (Unit)', () => {
       },
     );
     expect(result).toEqual(mockIncidents);
+  });
+
+  it('getDashboardSummary should call metricsService.getDashboardSummary with user ID', async () => {
+    const mockSummary: DashboardSummaryDto = {
+      totalMonitors: 3,
+      activeMonitors: 2,
+      pausedMonitors: 1,
+      passingEndpoints: 2,
+      failingEndpoints: 0,
+      neverCheckedEndpoints: 1,
+      activeIncidents: 0,
+      systemUptime24h: 99.8,
+    };
+    metricsService.getDashboardSummary.mockResolvedValue(mockSummary);
+
+    const result = await controller.getDashboardSummary(mockUser);
+
+    expect(metricsService.getDashboardSummary).toHaveBeenCalledWith('user-abc');
+    expect(result).toEqual(mockSummary);
+  });
+
+  it('getStats should call metricsService.getMonitorStats with monitor ID, user ID, and window', async () => {
+    const mockStats: MonitorStatsDto = {
+      monitorId: 'mon-1',
+      window: '24h',
+      from: '2026-10-25T12:00:00.000Z',
+      to: '2026-10-26T12:00:00.000Z',
+      uptimePercent: 98.5,
+      totalChecks: 100,
+      successfulChecks: 98,
+      failedChecks: 2,
+      avgLatencyMs: 145.2,
+      p50LatencyMs: 130,
+      p95LatencyMs: 250,
+      p99LatencyMs: 310,
+      series: [],
+    };
+    metricsService.getMonitorStats.mockResolvedValue(mockStats);
+
+    const result = await controller.getStats(mockUser, 'mon-1', {
+      window: '24h',
+    });
+
+    expect(metricsService.getMonitorStats).toHaveBeenCalledWith(
+      'mon-1',
+      'user-abc',
+      '24h',
+    );
+    expect(result).toEqual(mockStats);
   });
 });

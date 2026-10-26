@@ -2,13 +2,16 @@ import {
   AuthResponseDto,
   CheckResultDto,
   CreateMonitorRequestDto,
+  DashboardSummaryDto,
   ImmediateCheckResponse,
   IncidentDto,
   LoginRequestDto,
   MessageResponseDto,
   MonitorDto,
+  MonitorStatsDto,
   RegisterRequestDto,
   SECURITY_CONFIG,
+  StatsWindow,
   UpdateMonitorRequestDto,
   UserDto,
 } from '@devpulse/shared';
@@ -207,5 +210,16 @@ export const apiClient = {
 
   async getIncident(id: string): Promise<IncidentDto> {
     return request<IncidentDto>(`/incidents/${id}`);
+  },
+
+  async getMonitorStats(
+    id: string,
+    window: StatsWindow = '24h',
+  ): Promise<MonitorStatsDto> {
+    return request<MonitorStatsDto>(`/monitors/${id}/stats?window=${window}`);
+  },
+
+  async getDashboardSummary(): Promise<DashboardSummaryDto> {
+    return request<DashboardSummaryDto>('/monitors/dashboard/summary');
   },
 };

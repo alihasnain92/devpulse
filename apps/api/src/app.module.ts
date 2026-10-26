@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { MonitorsModule } from './monitors/monitors.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
 import { IncidentsModule } from './incidents/incidents.module';
+import { MetricsModule } from './metrics/metrics.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 
 @Module({
@@ -25,6 +26,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     IncidentsModule,
     MonitoringModule,
     MonitorsModule,
+    MetricsModule,
   ],
   providers: [
     {

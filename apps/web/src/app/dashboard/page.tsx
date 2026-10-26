@@ -2,7 +2,12 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CheckResultDto, IncidentDto, MonitorDto } from '@devpulse/shared';
+import {
+  CheckResultDto,
+  DashboardSummaryDto,
+  IncidentDto,
+  MonitorDto,
+} from '@devpulse/shared';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { Navbar } from '@/components/navbar';
@@ -43,6 +48,7 @@ export default function DashboardPage() {
     Record<string, CheckResultDto | null>
   >({});
   const [incidents, setIncidents] = useState<IncidentDto[]>([]);
+  const [summary, setSummary] = useState<DashboardSummaryDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,13 +57,15 @@ export default function DashboardPage() {
       try {
         setLoading(true);
         setError(null);
-        const [monitorsData, incidentsData] = await Promise.all([
+        const [monitorsData, incidentsData, summaryData] = await Promise.all([
           apiClient.getMonitors(),
           apiClient.getIncidents({ limit: 10 }).catch(() => [] as IncidentDto[]),
+          apiClient.getDashboardSummary().catch(() => null),
         ]);
 
         setMonitors(monitorsData);
         setIncidents(incidentsData);
+        setSummary(summaryData);
 
         // Fetch latest checks for the monitors
         const checkResults = await Promise.all(
@@ -213,7 +221,7 @@ export default function DashboardPage() {
         )}
 
         {/* Summary Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <Card className="border-slate-800 bg-slate-900/60 shadow-xs">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-slate-400">
@@ -222,9 +230,46 @@ export default function DashboardPage() {
               <Radio className="h-4 w-4 text-blue-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-white">{totalMonitors}</div>
+              <div className="text-3xl font-bold text-white">
+                {summary?.totalMonitors ?? totalMonitors}
+              </div>
               <p className="text-xs text-slate-400 mt-1">
-                {activeMonitors} active, {pausedMonitors} paused
+                {summary?.activeMonitors ?? activeMonitors} active,{' '}
+                {summary?.pausedMonitors ?? pausedMonitors} paused
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-800 bg-slate-900/60 shadow-xs">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-slate-400">
+                System Uptime (24h)
+              </CardTitle>
+              <Activity className="h-4 w-4 text-blue-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold font-mono">
+                {summary?.systemUptime24h !== null &&
+                summary?.systemUptime24h !== undefined ? (
+                  <span
+                    className={
+                      summary.systemUptime24h >= 99
+                        ? 'text-emerald-400'
+                        : summary.systemUptime24h >= 90
+                          ? 'text-amber-400'
+                          : 'text-red-400'
+                    }
+                  >
+                    {summary.systemUptime24h}%
+                  </span>
+                ) : (
+                  <span className="text-xl font-normal text-slate-500">
+                    No data yet
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                All monitored endpoints
               </p>
             </CardContent>
           </Card>
@@ -237,7 +282,9 @@ export default function DashboardPage() {
               <CheckCircle2 className="h-4 w-4 text-emerald-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-emerald-400">{passingCount}</div>
+              <div className="text-3xl font-bold text-emerald-400">
+                {summary?.passingEndpoints ?? passingCount}
+              </div>
               <p className="text-xs text-slate-400 mt-1">Expected HTTP status verified</p>
             </CardContent>
           </Card>
@@ -250,14 +297,16 @@ export default function DashboardPage() {
               <AlertCircle className="h-4 w-4 text-red-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-red-400">{failingCount}</div>
+              <div className="text-3xl font-bold text-red-400">
+                {summary?.failingEndpoints ?? failingCount}
+              </div>
               <p className="text-xs text-slate-400 mt-1">Status mismatch or network error</p>
             </CardContent>
           </Card>
 
           <Card
             className={`border-slate-800 shadow-xs ${
-              activeIncidents.length > 0
+              (summary?.activeIncidents ?? activeIncidents.length) > 0
                 ? 'bg-red-950/20 border-red-900/50'
                 : 'bg-slate-900/60'
             }`}
@@ -266,7 +315,7 @@ export default function DashboardPage() {
               <CardTitle className="text-sm font-medium text-slate-400">
                 Active Outages
               </CardTitle>
-              {activeIncidents.length > 0 ? (
+              {(summary?.activeIncidents ?? activeIncidents.length) > 0 ? (
                 <AlertTriangle className="h-4 w-4 text-red-400 animate-pulse" />
               ) : (
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
@@ -275,13 +324,15 @@ export default function DashboardPage() {
             <CardContent>
               <div
                 className={`text-3xl font-bold ${
-                  activeIncidents.length > 0 ? 'text-red-400' : 'text-emerald-400'
+                  (summary?.activeIncidents ?? activeIncidents.length) > 0
+                    ? 'text-red-400'
+                    : 'text-emerald-400'
                 }`}
               >
-                {activeIncidents.length}
+                {summary?.activeIncidents ?? activeIncidents.length}
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                {activeIncidents.length > 0
+                {(summary?.activeIncidents ?? activeIncidents.length) > 0
                   ? 'Ongoing incident in progress'
                   : 'Zero active outages recorded'}
               </p>

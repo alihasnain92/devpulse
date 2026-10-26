@@ -3,7 +3,13 @@
 import React, { useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CheckResultDto, IncidentDto, MonitorDto } from '@devpulse/shared';
+import {
+  CheckResultDto,
+  IncidentDto,
+  MonitorDto,
+  MonitorStatsDto,
+  StatsWindow,
+} from '@devpulse/shared';
 import { apiClient } from '@/lib/api-client';
 import { Navbar } from '@/components/navbar';
 import { Button } from '@/components/ui/button';
@@ -16,6 +22,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { LatencyChart } from '@/components/charts/latency-chart';
+import { UptimeBar } from '@/components/charts/uptime-bar';
 import {
   Activity,
   ArrowLeft,
@@ -56,6 +64,9 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
   const [latestCheck, setLatestCheck] = useState<CheckResultDto | null>(null);
   const [recentChecks, setRecentChecks] = useState<CheckResultDto[]>([]);
   const [incidents, setIncidents] = useState<IncidentDto[]>([]);
+  const [statsWindow, setStatsWindow] = useState<StatsWindow>('24h');
+  const [stats, setStats] = useState<MonitorStatsDto | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isToggling, setIsToggling] = useState(false);
@@ -66,6 +77,18 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
     type: 'success' | 'error' | 'info';
     text: string;
   } | null>(null);
+
+  const fetchStats = async (monitorId: string, window: StatsWindow) => {
+    try {
+      setStatsLoading(true);
+      const res = await apiClient.getMonitorStats(monitorId, window);
+      setStats(res);
+    } catch {
+      // Non-blocking metrics fetch
+    } finally {
+      setStatsLoading(false);
+    }
+  };
 
   const fetchChecks = async (monitorId: string) => {
     try {
@@ -88,7 +111,10 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
       setError(null);
       const data = await apiClient.getMonitor(id);
       setMonitor(data);
-      await fetchChecks(data.id);
+      await Promise.all([
+        fetchChecks(data.id),
+        fetchStats(data.id, statsWindow),
+      ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Monitor not found');
     } finally {
@@ -99,6 +125,12 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
   useEffect(() => {
     fetchMonitor();
   }, [id]);
+
+  useEffect(() => {
+    if (monitor?.id) {
+      fetchStats(monitor.id, statsWindow);
+    }
+  }, [statsWindow]);
 
   const handleTogglePause = async () => {
     if (!monitor) return;
@@ -147,7 +179,10 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
         }
       }
 
-      await fetchChecks(monitor.id);
+      await Promise.all([
+        fetchChecks(monitor.id),
+        fetchStats(monitor.id, statsWindow),
+      ]);
 
       if (resolvedCheck) {
         setFeedback({
@@ -503,6 +538,213 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
             </CardContent>
           </Card>
         </div>
+
+        {/* Phase 5 Metrics, Analytics & Interactive Charts */}
+        <Card className="border-slate-800 bg-slate-900/60 shadow-lg">
+          <CardHeader className="pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-lg text-white">
+                    Historical Performance & Availability
+                  </CardTitle>
+                  <Badge
+                    variant="outline"
+                    className="border-blue-500/30 text-blue-400 bg-blue-500/10 text-xs"
+                  >
+                    Phase 5 Active
+                  </Badge>
+                </div>
+                <CardDescription className="text-slate-400 mt-0.5">
+                  Nearest-rank latency percentiles, aggregate uptime telemetry, and time-series history
+                </CardDescription>
+              </div>
+
+              {/* Time Window Selector */}
+              <div className="inline-flex rounded-lg border border-slate-800 bg-slate-950 p-1 self-start sm:self-auto">
+                {(['24h', '7d', '30d'] as const).map((win) => (
+                  <button
+                    key={win}
+                    type="button"
+                    onClick={() => setStatsWindow(win)}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                      statsWindow === win
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {win === '24h'
+                      ? '24 Hours'
+                      : win === '7d'
+                        ? '7 Days'
+                        : '30 Days'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-6">
+            {/* Summary Metric Cards for Selected Window */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {/* Uptime */}
+              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70">
+                <div className="text-[11px] font-medium text-slate-400">
+                  Uptime ({statsWindow})
+                </div>
+                <div className="text-xl font-bold font-mono mt-1">
+                  {stats?.uptimePercent !== null &&
+                  stats?.uptimePercent !== undefined ? (
+                    <span
+                      className={
+                        stats.uptimePercent >= 99
+                          ? 'text-emerald-400'
+                          : stats.uptimePercent >= 90
+                            ? 'text-amber-400'
+                            : 'text-red-400'
+                      }
+                    >
+                      {stats.uptimePercent}%
+                    </span>
+                  ) : (
+                    <span className="text-xs font-normal text-slate-500">
+                      No data yet
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Avg Latency */}
+              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70">
+                <div className="text-[11px] font-medium text-slate-400">
+                  Avg Latency
+                </div>
+                <div className="text-xl font-bold font-mono text-white mt-1">
+                  {stats?.avgLatencyMs !== null &&
+                  stats?.avgLatencyMs !== undefined ? (
+                    <span>
+                      {stats.avgLatencyMs}
+                      <span className="text-xs text-slate-500 font-normal ml-0.5">
+                        ms
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-xs font-normal text-slate-500">
+                      No data yet
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* p50 */}
+              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70">
+                <div className="text-[11px] font-medium text-slate-400">
+                  p50 Latency
+                </div>
+                <div className="text-xl font-bold font-mono text-slate-200 mt-1">
+                  {stats?.p50LatencyMs !== null &&
+                  stats?.p50LatencyMs !== undefined ? (
+                    <span>
+                      {stats.p50LatencyMs}
+                      <span className="text-xs text-slate-500 font-normal ml-0.5">
+                        ms
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-xs font-normal text-slate-500">
+                      No data yet
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* p95 */}
+              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70">
+                <div className="text-[11px] font-medium text-slate-400">
+                  p95 Latency
+                </div>
+                <div className="text-xl font-bold font-mono text-amber-300 mt-1">
+                  {stats?.p95LatencyMs !== null &&
+                  stats?.p95LatencyMs !== undefined ? (
+                    <span>
+                      {stats.p95LatencyMs}
+                      <span className="text-xs text-slate-500 font-normal ml-0.5">
+                        ms
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-xs font-normal text-slate-500">
+                      No data yet
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* p99 */}
+              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70">
+                <div className="text-[11px] font-medium text-slate-400">
+                  p99 Latency
+                </div>
+                <div className="text-xl font-bold font-mono text-red-300 mt-1">
+                  {stats?.p99LatencyMs !== null &&
+                  stats?.p99LatencyMs !== undefined ? (
+                    <span>
+                      {stats.p99LatencyMs}
+                      <span className="text-xs text-slate-500 font-normal ml-0.5">
+                        ms
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-xs font-normal text-slate-500">
+                      No data yet
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Total Checks */}
+              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70">
+                <div className="text-[11px] font-medium text-slate-400">
+                  Total Checks
+                </div>
+                <div className="text-xl font-bold font-mono text-white mt-1">
+                  {stats?.totalChecks ?? 0}
+                </div>
+                <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+                  {stats
+                    ? `${stats.successfulChecks} pass, ${stats.failedChecks} fail`
+                    : '0 pass, 0 fail'}
+                </div>
+              </div>
+            </div>
+
+            {/* Availability Timeline (UptimeBar) */}
+            <div className="space-y-2 pt-2">
+              <div className="text-xs font-semibold text-slate-300">
+                Availability History (
+                {statsWindow === '24h'
+                  ? '24 Hours'
+                  : statsWindow === '7d'
+                    ? '7 Days'
+                    : '30 Days'}
+                )
+              </div>
+              <UptimeBar series={stats?.series || []} isLoading={statsLoading} />
+            </div>
+
+            {/* Latency Trend Line Chart */}
+            <div className="space-y-2 pt-2">
+              <div className="text-xs font-semibold text-slate-300">
+                Response Latency Trend (
+                {statsWindow === '24h' ? 'Hourly' : 'Daily'} Average)
+              </div>
+              <LatencyChart
+                series={stats?.series || []}
+                isLoading={statsLoading}
+              />
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Live Execution Telemetry Card */}
         <Card className="border-slate-800 bg-slate-900/50 shadow-md">

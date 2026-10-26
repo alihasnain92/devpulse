@@ -98,3 +98,42 @@ export interface ImmediateCheckResponse {
   checkJobId: string;
   statusUrl: string;
 }
+
+export type StatsWindow = '24h' | '7d' | '30d';
+
+export interface TimeBucketDto {
+  timestamp: string;
+  label: string;
+  uptimePercent: number | null;
+  avgLatencyMs: number | null;
+  totalChecks: number;
+  successfulChecks: number;
+  failedChecks: number;
+}
+
+export interface MonitorStatsDto {
+  monitorId: string;
+  window: StatsWindow;
+  from: string;
+  to: string;
+  uptimePercent: number | null;
+  totalChecks: number;
+  successfulChecks: number;
+  failedChecks: number;
+  avgLatencyMs: number | null;
+  p50LatencyMs: number | null;
+  p95LatencyMs: number | null;
+  p99LatencyMs: number | null;
+  series: TimeBucketDto[];
+}
+
+export interface DashboardSummaryDto {
+  totalMonitors: number;
+  activeMonitors: number;
+  pausedMonitors: number;
+  passingEndpoints: number;
+  failingEndpoints: number;
+  neverCheckedEndpoints: number;
+  activeIncidents: number;
+  systemUptime24h: number | null;
+}

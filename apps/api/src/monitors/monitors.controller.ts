@@ -13,9 +13,11 @@ import {
 } from '@nestjs/common';
 import {
   CheckResultDto,
+  DashboardSummaryDto,
   ImmediateCheckResponse,
   IncidentDto,
   MonitorDto,
+  MonitorStatsDto,
 } from '@devpulse/shared';
 import {
   AuthenticatedUser,
@@ -25,8 +27,10 @@ import { CsrfGuard } from '../auth/guards/csrf.guard';
 import { MonitorsService } from './monitors.service';
 import { MonitoringService } from '../monitoring/monitoring.service';
 import { IncidentsService } from '../incidents/incidents.service';
+import { MetricsService } from '../metrics/metrics.service';
 import { CreateMonitorDto } from './dto/create-monitor.dto';
 import { UpdateMonitorDto } from './dto/update-monitor.dto';
+import { GetMonitorStatsDto } from '../metrics/dto/get-monitor-stats.dto';
 
 @Controller('monitors')
 @UseGuards(CsrfGuard)
@@ -35,6 +39,7 @@ export class MonitorsController {
     private readonly monitorsService: MonitorsService,
     private readonly monitoringService: MonitoringService,
     private readonly incidentsService: IncidentsService,
+    private readonly metricsService: MetricsService,
   ) {}
 
   @Post()
@@ -50,6 +55,14 @@ export class MonitorsController {
   @HttpCode(HttpStatus.OK)
   async findAll(@CurrentUser() user: AuthenticatedUser): Promise<MonitorDto[]> {
     return this.monitorsService.findAll(user.id);
+  }
+
+  @Get('dashboard/summary')
+  @HttpCode(HttpStatus.OK)
+  async getDashboardSummary(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<DashboardSummaryDto> {
+    return this.metricsService.getDashboardSummary(user.id);
   }
 
   @Get(':id')
@@ -107,6 +120,16 @@ export class MonitorsController {
     @Param('id') id: string,
   ): Promise<CheckResultDto | null> {
     return this.monitoringService.getLatestCheck(id, user.id);
+  }
+
+  @Get(':id/stats')
+  @HttpCode(HttpStatus.OK)
+  async getStats(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Query() query: GetMonitorStatsDto,
+  ): Promise<MonitorStatsDto> {
+    return this.metricsService.getMonitorStats(id, user.id, query.window);
   }
 
   @Get(':id/incidents')
