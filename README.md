@@ -38,12 +38,14 @@ flowchart TD
         MonitorWorker["Monitoring Worker<br/>(queue: monitor-checks)"]
         OutboxPublisher["Outbox Publisher<br/>(FOR UPDATE SKIP LOCKED)"]
         WebhookWorker["Webhook Delivery Worker<br/>(queue: webhook-deliveries)"]
+        EmailWorker["Email Delivery Worker<br/>(queue: notification-emails)"]
         SSRF["SSRF-Hardened Client<br/>(Socket Pinning + CIDR Filter)"]
     end
 
     subgraph target_infra [Target Infrastructure & Endpoints]
         TargetAPI["External Target API (Health Probes)"]
         WebhookDest["Customer Webhook Endpoint (HMAC-Signed)"]
+        SMTPDest["Customer Mailbox (SMTP Relay)"]
     end
 
     Browser -->|"HTTPS / UI Requests"| Frontend
@@ -57,12 +59,15 @@ flowchart TD
     SSRF -->|"2. Outbound Probe (Outside DB Tx)"| TargetAPI
     MonitorWorker -->|"3. Persist Check & Outbox Event"| Postgres
     OutboxPublisher -->|"Poll Outbox (SKIP LOCKED)"| Postgres
-    OutboxPublisher -->|"Fanout Webhook Jobs"| Redis
+    OutboxPublisher -->|"Fanout Webhook & Email Jobs"| Redis
     WebhookWorker -->|"Consume Delivery Jobs"| Redis
     WebhookWorker -->|"Delivery-Time SSRF & HMAC Sign"| SSRF
     SSRF -->|"POST Payload (Strict No-Redirect)"| WebhookDest
     WebhookWorker -->|"Persist Delivery Attempt"| Postgres
-    API -->|"Aggregate Telemetry, Deliveries & Incidents"| Browser
+    EmailWorker -->|"Consume Email Jobs"| Redis
+    EmailWorker -->|"Send Alert Email"| SMTPDest
+    EmailWorker -->|"Persist Delivery State"| Postgres
+    API -->|"Aggregate Telemetry, Deliveries & Notifications"| Browser
 ```
 
 ---
@@ -316,20 +321,25 @@ All integration and smoke tests dynamically reroute database connections to `dev
    - Built-in constant-time signature verification with a 300-second replay tolerance window.
 5. **Programmatic API Keys**:
    - High-entropy tokens (`dp_live_...`) with one-way SHA-256 hashing at rest.
-   - Scope-based access control with least-privilege principles (`monitors:read`, `monitors:write`, `incidents:read`, `webhooks:read`, `webhooks:write`).
+   - Scope-based access control with least-privilege principles (`monitors:read`, `monitors:write`, `incidents:read`, `webhooks:read`, `webhooks:write`, `notifications:read`, `notifications:write`).
    - CSRF exemption for programmatic API key requests without ambient browser session cookies.
+6. **Incident Notifications & Email Pipeline Security**:
+   - Transactional outbox persistence ensures zero external I/O (no HTTP, no SMTP, no Redis) inside active incident database transactions.
+   - User notification preferences strictly enforced at transactional creation time (defaulting safely to in-app enabled and email opt-in).
+   - HTML injection and XSS mitigation in email clients via strict character entity encoding of user-controlled monitor names, failure causes, and URLs.
+   - **Durable At-Least-Once Delivery**: DevPulse email notifications provide durable at-least-once delivery. A rare duplicate email may occur when the SMTP server accepts a message but DevPulse crashes before persisting the successful result.
+   - **Simulated Email Delivery**: Demo account alerts (`demo@devpulse.dev`) explicitly record a simulated email delivery (`DEMO_SIMULATION`) rather than an external SMTP-delivered email to prevent spam and outbound network overhead.
+   - Automatic lease timeouts and recovery workers with bounded retry enforcement (up to 5 attempts) preventing runaway retries or orphaned `PROCESSING` rows.
 
 ---
 
-## Level 2 Roadmap & Future Enhancements
+## Level 2 Roadmap
 
 - [x] **Webhook Registration & Security (Phase 7)**: User-managed webhooks, AES-256-GCM secret encryption, versioned HMAC-SHA256 signatures, and scoped programmatic API keys.
 - [x] **Reliable Webhook Event Delivery Pipeline (Phase 8)**: Transactional outbox pattern, BullMQ delivery queue, socket-pinned delivery-time SSRF defenses, strict no-redirect policy, exponential backoff with jitter (up to 6 attempts), and durable attempt history.
 - [x] **Webhook Delivery History, Attempt Inspection & Manual Replay (Phase 9)**: Delivery history UI, attempt timeline inspection with response previews, endpoint soft deletion, and idempotent manual replay with lineage tracking.
-- [ ] **Multi-Channel Alerting**: Native integrations for Slack webhooks, Discord webhooks, PagerDuty, and email alerts via SendGrid/SES.
-- [ ] **Multi-Region Monitoring Probes**: Distributed worker nodes running in US-East, EU-Central, and AP-East to detect regional outages.
-- [ ] **Public Status Pages**: White-label public status dashboards with incident post-mortems and custom domains.
-- [ ] **Configurable Incident Thresholds**: Custom failure streak rules, degraded latency thresholds, and SSL certificate expiration warnings.
+- [x] **Email & In-App Incident Notifications (Phase 10)**: Transactional notification and email outbox generation, pluggable SMTP email provider, responsive HTML & text email templates, in-app notification center with unread badges, filter tabs, bulk read operations, and scoped API keys (`notifications:read`, `notifications:write`).
+- [ ] **Rate Limiting & Final Hardening (Phase 11)**: API rate limiting, API-key abuse protection / quotas, Redis-backed distributed throttling, idempotency review and enforcement, webhook/event ingestion limits, authentication/authorization hardening, CSRF review, API-key scope review, HMAC verification/signing review, SSRF protections review, tenant-isolation audit, webhook replay protections, notification/email abuse protections, failure/recovery testing, final Level 2 documentation, and final CI/release verification.
 
 ---
 

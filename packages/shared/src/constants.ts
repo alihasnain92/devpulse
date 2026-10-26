@@ -123,9 +123,67 @@ export const API_KEY_SCOPES = [
   'incidents:read',
   'webhooks:read',
   'webhooks:write',
+  'notifications:read',
+  'notifications:write',
 ] as const;
 
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
+
+export const NOTIFICATION_TYPE = {
+  INCIDENT_CREATED: 'INCIDENT_CREATED',
+  INCIDENT_RESOLVED: 'INCIDENT_RESOLVED',
+} as const;
+
+export type NotificationType =
+  (typeof NOTIFICATION_TYPE)[keyof typeof NOTIFICATION_TYPE];
+
+export const NOTIFICATION_PREFERENCE_DEFAULTS = {
+  inAppIncidentCreated: true,
+  inAppIncidentResolved: true,
+  emailIncidentCreated: false,
+  emailIncidentResolved: false,
+} as const;
+
+export const NOTIFICATION_EMAIL_QUEUE_NAME = 'notification-emails';
+
+export const NOTIFICATION_EMAIL_STATUS = {
+  PENDING: 'PENDING',
+  PROCESSING: 'PROCESSING',
+  RETRYING: 'RETRYING',
+  DELIVERED: 'DELIVERED',
+  FAILED: 'FAILED',
+} as const;
+
+export type NotificationEmailStatus =
+  (typeof NOTIFICATION_EMAIL_STATUS)[keyof typeof NOTIFICATION_EMAIL_STATUS];
+
+export const NOTIFICATION_EMAIL_OUTBOX_STATUS = {
+  PENDING: 'PENDING',
+  PROCESSING: 'PROCESSING',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+} as const;
+
+export type NotificationEmailOutboxStatus =
+  (typeof NOTIFICATION_EMAIL_OUTBOX_STATUS)[keyof typeof NOTIFICATION_EMAIL_OUTBOX_STATUS];
+
+export const NOTIFICATION_EMAIL_LEASE_CONFIG = {
+  OUTBOX_LEASE_TIMEOUT_MS: 60000, // 60 seconds
+  DELIVERY_LEASE_TIMEOUT_MS: 120000, // 120 seconds
+} as const;
+
+export const NOTIFICATION_EMAIL_RETRY_CONFIG = {
+  MAX_ATTEMPTS: 5,
+  BASE_DELAY_MS: 30000, // 30 seconds
+  MAX_DELAY_MS: 1800000, // 30 minutes
+  BACKOFF_EXPONENT: 2,
+  JITTER_FACTOR: 0.2, // +/- 20% jitter
+} as const;
+
+export const NOTIFICATION_PAGINATION_CONFIG = {
+  DEFAULT_LIMIT: 25,
+  MAX_LIMIT: 100,
+} as const;
 
 export const API_KEY_CONFIG = {
   PREFIX: 'dp_live_',

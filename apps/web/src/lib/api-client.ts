@@ -13,12 +13,17 @@ import {
   MessageResponseDto,
   MonitorDto,
   MonitorStatsDto,
+  NotificationDto,
+  NotificationPreferenceDto,
+  PaginatedNotificationsDto,
   PaginatedWebhookDeliveriesDto,
   RegisterRequestDto,
   ReplayWebhookDeliveryResponseDto,
   SECURITY_CONFIG,
   StatsWindow,
+  UnreadNotificationCountDto,
   UpdateMonitorRequestDto,
+  UpdateNotificationPreferenceDto,
   UpdateWebhookRequestDto,
   UserDto,
   WebhookAttemptDto,
@@ -338,6 +343,50 @@ export const apiClient = {
   ): Promise<{ success: boolean; message: string }> {
     return request<{ success: boolean; message: string }>(`/api-keys/${id}`, {
       method: 'DELETE',
+    });
+  },
+
+  async getNotificationPreferences(): Promise<NotificationPreferenceDto> {
+    return request<NotificationPreferenceDto>('/notifications/preferences');
+  },
+
+  async updateNotificationPreferences(
+    dto: UpdateNotificationPreferenceDto,
+  ): Promise<NotificationPreferenceDto> {
+    return request<NotificationPreferenceDto>('/notifications/preferences', {
+      method: 'PATCH',
+      body: JSON.stringify(dto),
+    });
+  },
+
+  async getNotifications(params?: {
+    page?: number;
+    limit?: number;
+    status?: 'all' | 'read' | 'unread';
+  }): Promise<PaginatedNotificationsDto> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', String(params.page));
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    if (params?.status) searchParams.set('status', params.status);
+    const qs = searchParams.toString();
+    return request<PaginatedNotificationsDto>(
+      `/notifications${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  async getUnreadNotificationCount(): Promise<UnreadNotificationCountDto> {
+    return request<UnreadNotificationCountDto>('/notifications/unread-count');
+  },
+
+  async markNotificationRead(id: string): Promise<NotificationDto> {
+    return request<NotificationDto>(`/notifications/${id}/read`, {
+      method: 'PATCH',
+    });
+  },
+
+  async markAllNotificationsRead(): Promise<{ count: number }> {
+    return request<{ count: number }>('/notifications/read-all', {
+      method: 'POST',
     });
   },
 };

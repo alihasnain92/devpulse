@@ -22,6 +22,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   AlertCircle,
   AlertTriangle,
+  Bell,
   Check,
   Copy,
   ExternalLink,
@@ -34,13 +35,14 @@ import {
   Webhook,
 } from 'lucide-react';
 import { DeliveriesTab } from './deliveries-tab';
+import { NotificationsTab } from './notifications-tab';
 
 export default function SettingsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
 
   const [activeTab, setActiveTab] = React.useState<
-    'webhooks' | 'deliveries' | 'apikeys'
+    'webhooks' | 'deliveries' | 'apikeys' | 'notifications'
   >('webhooks');
 
   // Webhooks State
@@ -358,6 +360,18 @@ export default function SettingsPage() {
               {apiKeys.length}
             </Badge>
           </button>
+
+          <button
+            onClick={() => setActiveTab('notifications')}
+            className={`flex items-center gap-2 pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'notifications'
+                ? 'border-blue-500 text-blue-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Bell className="h-4 w-4" />
+            <span>Notifications</span>
+          </button>
         </div>
 
         {/* TAB 1: WEBHOOKS */}
@@ -612,6 +626,11 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
+        )}
+
+        {/* TAB 4: NOTIFICATIONS */}
+        {activeTab === 'notifications' && (
+          <NotificationsTab />
         )}
       </main>
 

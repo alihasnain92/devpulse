@@ -4,18 +4,43 @@ import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { apiClient } from '@/lib/api-client';
 import { Button } from './ui/button';
-import { Activity, LayoutDashboard, Radio, AlertTriangle, Settings, LogOut, Menu, X } from 'lucide-react';
+import { Activity, LayoutDashboard, Radio, AlertTriangle, Settings, LogOut, Menu, X, Bell } from 'lucide-react';
 
 export function Navbar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [unreadCount, setUnreadCount] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!user) return;
+    let isMounted = true;
+    const fetchUnread = async () => {
+      try {
+        const data = await apiClient.getUnreadNotificationCount();
+        if (isMounted) {
+          setUnreadCount(data.count);
+        }
+      } catch {
+        // Silently ignore background polling errors
+      }
+    };
+
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [user]);
 
   const navLinks = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/monitors', label: 'Monitors', icon: Radio },
     { href: '/incidents', label: 'Incidents', icon: AlertTriangle },
+    { href: '/notifications', label: 'Notifications', icon: Bell, badge: unreadCount },
     { href: '/settings', label: 'Settings', icon: Settings },
   ];
 
@@ -55,6 +80,11 @@ export function Navbar() {
                   >
                     <Icon className="h-4 w-4" />
                     <span>{link.label}</span>
+                    {Boolean(link.badge && link.badge > 0) && (
+                      <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-xs font-semibold bg-red-600 text-white leading-tight">
+                        {link.badge! > 99 ? '99+' : link.badge}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -114,14 +144,21 @@ export function Navbar() {
                   key={link.href}
                   href={link.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium ${
+                  className={`flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium ${
                     isActive
                       ? 'bg-slate-800 text-blue-400'
                       : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
                   }`}
                 >
-                  <Icon className="h-4 w-4" />
-                  <span>{link.label}</span>
+                  <div className="flex items-center gap-2.5">
+                    <Icon className="h-4 w-4" />
+                    <span>{link.label}</span>
+                  </div>
+                  {Boolean(link.badge && link.badge > 0) && (
+                    <span className="px-1.5 py-0.2 rounded-full text-xs font-semibold bg-red-600 text-white leading-tight">
+                      {link.badge! > 99 ? '99+' : link.badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}

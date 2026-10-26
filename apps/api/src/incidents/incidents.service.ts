@@ -2,12 +2,14 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   IncidentDto,
   MONITOR_LIMITS,
 } from '@devpulse/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 interface PrismaIncidentRecord {
   id: string;
@@ -36,6 +38,11 @@ export interface PrismaTxClient {
   monitor: any;
   webhookEvent?: any;
   webhookOutbox?: any;
+  notification?: any;
+  notificationEmailDelivery?: any;
+  notificationEmailOutbox?: any;
+  notificationPreference?: any;
+  user?: any;
   $queryRaw: (query: any, ...values: any[]) => Promise<any>;
 }
 
@@ -43,7 +50,10 @@ export interface PrismaTxClient {
 export class IncidentsService {
   private readonly logger = new Logger(IncidentsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly notificationsService?: NotificationsService,
+  ) {}
 
   /**
    * Evaluates monitor check outcome and atomically transitions incident state.
@@ -86,11 +96,11 @@ export class IncidentsService {
             },
           });
 
-          // Fetch monitor to attach tenant details to webhook event
+          // Fetch monitor to attach tenant details to webhook event and notifications
           const monitor = tx.monitor?.findUnique
             ? await tx.monitor.findUnique({
                 where: { id: monitorId },
-                select: { id: true, name: true, userId: true },
+                select: { id: true, name: true, userId: true, url: true },
               })
             : null;
 
@@ -116,6 +126,7 @@ export class IncidentsService {
                   },
                 },
               },
+              monitor,
             );
           }
 
@@ -192,11 +203,11 @@ export class IncidentsService {
           },
         });
 
-        // Fetch monitor to attach tenant details to webhook event
+        // Fetch monitor to attach tenant details to webhook event and notifications
         const monitor = tx.monitor?.findUnique
           ? await tx.monitor.findUnique({
               where: { id: monitorId },
-              select: { id: true, name: true, userId: true },
+              select: { id: true, name: true, userId: true, url: true },
             })
           : null;
 
@@ -222,6 +233,7 @@ export class IncidentsService {
                 },
               },
             },
+            monitor,
           );
         }
 
@@ -446,6 +458,7 @@ export class IncidentsService {
     sourceId: string,
     dedupeKey: string,
     payload: Record<string, unknown>,
+    monitor?: { id: string; name: string; url?: string },
   ): Promise<void> {
     if (!tx.webhookEvent || !tx.webhookOutbox) {
       return;
@@ -474,6 +487,15 @@ export class IncidentsService {
       this.logger.log(
         `Recorded WebhookEvent ${event.id} (${type}) and Outbox record for user ${userId}`,
       );
+
+      // Generate in-app notifications and email outbox records within the same transaction
+      if (this.notificationsService && monitor) {
+        await this.notificationsService.generateNotificationsForEvent(
+          tx,
+          event,
+          monitor,
+        );
+      }
     } catch (err: unknown) {
       const prismaErr = err as { code?: string };
       if (prismaErr?.code === 'P2002') {

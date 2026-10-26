@@ -308,3 +308,59 @@ export interface ApiKeyCreatedResponseDto {
   apiKey: ApiKeyDto;
   rawKey: string;
 }
+
+export interface NotificationPreferenceDto {
+  userId: string;
+  inAppIncidentCreated: boolean;
+  inAppIncidentResolved: boolean;
+  emailIncidentCreated: boolean;
+  emailIncidentResolved: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface UpdateNotificationPreferenceDto {
+  inAppIncidentCreated?: boolean;
+  inAppIncidentResolved?: boolean;
+  emailIncidentCreated?: boolean;
+  emailIncidentResolved?: boolean;
+}
+
+export interface NotificationDto {
+  id: string;
+  userId: string;
+  eventId: string;
+  type: string;
+  title: string;
+  message: string;
+  incidentId: string | null;
+  monitorId: string | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface PaginatedNotificationsDto {
+  items: NotificationDto[];
+  total: number;
+  unreadCount: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export interface UnreadNotificationCountDto {
+  count: number;
+}
+
+export interface NotificationEmailDeliveryDto {
+  id: string;
+  userId: string;
+  eventId: string;
+  toEmail: string;
+  subject: string;
+  status: string;
+  attemptCount: number;
+  deliveredAt: string | null;
+  lastErrorCode: string | null;
+  createdAt: string;
+}

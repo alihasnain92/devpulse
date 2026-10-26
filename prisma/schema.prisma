@@ -27,6 +27,9 @@ model User {
   webhookEndpoints WebhookEndpoint[]
   apiKeys          ApiKey[]
   webhookEvents    WebhookEvent[]
+  notificationPreference NotificationPreference?
+  notifications          Notification[]
+  emailDeliveries        NotificationEmailDelivery[]
 
   @@map("users")
 }
@@ -156,6 +159,8 @@ model WebhookEvent {
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   outbox     WebhookOutbox?
   deliveries WebhookDelivery[]
+  notifications   Notification[]
+  emailDeliveries NotificationEmailDelivery[]
 
   @@index([userId])
   @@index([createdAt])
@@ -236,4 +241,88 @@ model WebhookAttempt {
   @@unique([deliveryId, attemptNumber])
   @@index([deliveryId])
   @@map("webhook_attempts")
+}
+
+model NotificationPreference {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  inAppIncidentCreated  Boolean  @default(true)
+  inAppIncidentResolved Boolean  @default(true)
+  emailIncidentCreated  Boolean  @default(false)
+  emailIncidentResolved Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model Notification {
+  id         String    @id @default(uuid())
+  userId     String
+  eventId    String
+  type       String
+  title      String
+  message    String
+  incidentId String?
+  monitorId  String?
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event      WebhookEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@index([userId, readAt, createdAt])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model NotificationEmailDelivery {
+  id               String                   @id @default(uuid())
+  userId           String
+  eventId          String
+  toEmail          String
+  subject          String
+  bodyText         String
+  bodyHtml         String
+  status           String                   @default("PENDING")
+  attemptCount     Int                      @default(0)
+  claimedAt        DateTime?
+  nextAttemptAt    DateTime?
+  deliveredAt      DateTime?
+  lastErrorCode    String?
+  lastErrorMessage String?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  user             User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event            WebhookEvent             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  outbox           NotificationEmailOutbox?
+
+  @@unique([userId, eventId])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([status, nextAttemptAt])
+  @@index([status, claimedAt])
+  @@map("notification_email_deliveries")
+}
+
+model NotificationEmailOutbox {
+  id           String                    @id @default(uuid())
+  deliveryId   String                    @unique
+  status       String                    @default("PENDING")
+  attemptCount Int                       @default(0)
+  availableAt  DateTime                  @default(now())
+  claimedAt    DateTime?
+  lastError    String?
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  delivery     NotificationEmailDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+  @@index([status, claimedAt])
+  @@map("notification_email_outbox")
 }

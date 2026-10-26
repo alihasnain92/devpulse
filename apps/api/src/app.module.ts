@@ -11,6 +11,7 @@ import { IncidentsModule } from './incidents/incidents.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { ApiKeyScopesGuard } from './api-keys/guards/api-key-scopes.guard';
 
@@ -32,6 +33,7 @@ import { ApiKeyScopesGuard } from './api-keys/guards/api-key-scopes.guard';
     MetricsModule,
     WebhooksModule,
     ApiKeysModule,
+    NotificationsModule,
   ],
   providers: [
     {

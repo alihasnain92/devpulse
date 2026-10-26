@@ -5,13 +5,18 @@ import { MonitoringWorkerService } from './monitoring/queue/monitoring-worker.se
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { WebhookDeliveryWorkerService } from './webhooks/queue/webhook-delivery-worker.service';
 import { WebhookOutboxPublisherService } from './webhooks/outbox/webhook-outbox-publisher.service';
+import { NotificationsModule } from './notifications/notifications.module';
+import { NotificationEmailWorkerService } from './notifications/queue/notification-email-worker.service';
+import { NotificationEmailPublisherService } from './notifications/outbox/notification-email-publisher.service';
 
 @Module({
-  imports: [PrismaModule, MonitoringModule, WebhooksModule],
+  imports: [PrismaModule, MonitoringModule, WebhooksModule, NotificationsModule],
   providers: [
     MonitoringWorkerService,
     WebhookDeliveryWorkerService,
     WebhookOutboxPublisherService,
+    NotificationEmailWorkerService,
+    NotificationEmailPublisherService,
   ],
 })
 export class WorkerModule {}
