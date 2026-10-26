@@ -1,4 +1,9 @@
-import { ApiKeyScope, HttpMethod, WebhookEventType } from './constants';
+import {
+  ApiKeyScope,
+  HttpMethod,
+  WebhookAttemptStatus,
+  WebhookEventType,
+} from './constants';
 
 export interface HealthResponse {
   status: 'ok';
@@ -170,6 +175,62 @@ export interface UpdateWebhookRequestDto {
 export interface WebhookCreatedResponseDto {
   endpoint: WebhookEndpointDto;
   signingSecret: string;
+}
+
+export interface WebhookEventPayload {
+  id: string;
+  type: WebhookEventType;
+  createdAt: string;
+  data: {
+    incident: {
+      id: string;
+      monitorId: string;
+      monitorName?: string;
+      startedAt: string;
+      resolvedAt: string | null;
+      cause?: string;
+    };
+  };
+}
+
+export interface WebhookEventDto {
+  id: string;
+  userId: string;
+  type: WebhookEventType;
+  sourceType: string;
+  sourceId: string;
+  dedupeKey: string;
+  payload: WebhookEventPayload;
+  createdAt: string;
+}
+
+export interface WebhookDeliveryDto {
+  id: string;
+  eventId: string;
+  endpointId: string;
+  status: string;
+  attemptCount: number;
+  claimedAt: string | null;
+  nextAttemptAt: string | null;
+  deliveredAt: string | null;
+  lastHttpStatus: number | null;
+  lastErrorCode: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WebhookAttemptDto {
+  id: string;
+  deliveryId: string;
+  attemptNumber: number;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  httpStatus: number | null;
+  outcome: WebhookAttemptStatus;
+  errorCode: string | null;
+  responsePreview: string | null;
+  createdAt: string;
 }
 
 export interface ApiKeyDto {

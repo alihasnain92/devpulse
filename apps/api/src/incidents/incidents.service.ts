@@ -34,6 +34,8 @@ export interface PrismaTxClient {
   incident: any;
   checkResult: any;
   monitor: any;
+  webhookEvent?: any;
+  webhookOutbox?: any;
   $queryRaw: (query: any, ...values: any[]) => Promise<any>;
 }
 
@@ -83,6 +85,39 @@ export class IncidentsService {
               resolvedAt: checkResult.checkedAt,
             },
           });
+
+          // Fetch monitor to attach tenant details to webhook event
+          const monitor = tx.monitor?.findUnique
+            ? await tx.monitor.findUnique({
+                where: { id: monitorId },
+                select: { id: true, name: true, userId: true },
+              })
+            : null;
+
+          if (monitor) {
+            await this.recordWebhookEventAndOutbox(
+              tx,
+              monitor.userId,
+              'incident.resolved',
+              openIncident.id,
+              `incident.resolved:${openIncident.id}`,
+              {
+                id: `evt_inc_res_${openIncident.id}`,
+                type: 'incident.resolved',
+                createdAt: new Date().toISOString(),
+                data: {
+                  incident: {
+                    id: openIncident.id,
+                    monitorId: monitor.id,
+                    monitorName: monitor.name,
+                    startedAt: openIncident.startedAt.toISOString(),
+                    resolvedAt: checkResult.checkedAt.toISOString(),
+                    cause: openIncident.cause,
+                  },
+                },
+              },
+            );
+          }
 
           this.logger.log(
             `Incident ${openIncident.id} for monitor ${monitorId} resolved by check ${checkResult.id} at ${checkResult.checkedAt.toISOString()}`,
@@ -156,6 +191,39 @@ export class IncidentsService {
             isSeeded: checkResult.isSeeded ?? false,
           },
         });
+
+        // Fetch monitor to attach tenant details to webhook event
+        const monitor = tx.monitor?.findUnique
+          ? await tx.monitor.findUnique({
+              where: { id: monitorId },
+              select: { id: true, name: true, userId: true },
+            })
+          : null;
+
+        if (monitor) {
+          await this.recordWebhookEventAndOutbox(
+            tx,
+            monitor.userId,
+            'incident.created',
+            created.id,
+            `incident.created:${created.id}`,
+            {
+              id: `evt_inc_crt_${created.id}`,
+              type: 'incident.created',
+              createdAt: new Date().toISOString(),
+              data: {
+                incident: {
+                  id: created.id,
+                  monitorId: monitor.id,
+                  monitorName: monitor.name,
+                  startedAt: created.startedAt.toISOString(),
+                  resolvedAt: null,
+                  cause: created.cause,
+                },
+              },
+            },
+          );
+        }
 
         this.logger.warn(
           `Opened incident ${created.id} for monitor ${monitorId} after ${MONITOR_LIMITS.CONSECUTIVE_FAILURES_FOR_INCIDENT} consecutive failures: ${sanitizedCause}`,
@@ -359,5 +427,65 @@ export class IncidentsService {
       isResolved,
       isSeeded: record.isSeeded,
     };
+  }
+
+  /**
+   * Records a durable WebhookEvent and transactional WebhookOutbox row
+   * atomically within the caller's active database transaction.
+   *
+   * Idempotency & Tenant Safety:
+   * 1. dedupeKey uniqueness (e.g. incident.created:<incidentId>) guarantees
+   *    concurrent or retried incident checks cannot create duplicate events.
+   * 2. userId is strictly derived from the monitor's owner to prevent cross-tenant leaks.
+   * 3. Completely executed inside PostgreSQL with zero Redis or HTTP calls.
+   */
+  private async recordWebhookEventAndOutbox(
+    tx: PrismaTxClient,
+    userId: string,
+    type: 'incident.created' | 'incident.resolved',
+    sourceId: string,
+    dedupeKey: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    if (!tx.webhookEvent || !tx.webhookOutbox) {
+      return;
+    }
+
+    try {
+      const event = await tx.webhookEvent.create({
+        data: {
+          userId,
+          type,
+          sourceType: 'incident',
+          sourceId,
+          dedupeKey,
+          payload,
+        },
+      });
+
+      await tx.webhookOutbox.create({
+        data: {
+          eventId: event.id,
+          status: 'PENDING',
+          availableAt: new Date(),
+        },
+      });
+
+      this.logger.log(
+        `Recorded WebhookEvent ${event.id} (${type}) and Outbox record for user ${userId}`,
+      );
+    } catch (err: unknown) {
+      const prismaErr = err as { code?: string };
+      if (prismaErr?.code === 'P2002') {
+        this.logger.warn(
+          `Duplicate WebhookEvent prevented by dedupeKey '${dedupeKey}' (P2002).`,
+        );
+        return;
+      }
+      this.logger.error(
+        `Failed to record WebhookEvent for incident transition: ${(err as Error).message}`,
+      );
+      throw err;
+    }
   }
 }

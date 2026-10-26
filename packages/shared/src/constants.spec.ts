@@ -7,6 +7,12 @@ import {
   DEMO_CONFIG,
   WEBHOOK_EVENT_TYPES,
   WEBHOOK_CONFIG,
+  WEBHOOK_DELIVERIES_QUEUE_NAME,
+  WEBHOOK_DELIVERY_STATUS,
+  WEBHOOK_OUTBOX_STATUS,
+  WEBHOOK_RETRY_CONFIG,
+  WEBHOOK_ATTEMPT_STATUS,
+  WEBHOOK_LEASE_CONFIG,
   API_KEY_SCOPES,
   API_KEY_CONFIG,
 } from './constants';
@@ -101,6 +107,39 @@ describe('Shared Constants', () => {
     it('should define API key configuration and prefix', () => {
       expect(API_KEY_CONFIG.PREFIX).toBe('dp_live_');
       expect(API_KEY_CONFIG.HEADER_NAME).toBe('x-api-key');
+    });
+
+    it('should define webhook delivery queue and status constants', () => {
+      expect(WEBHOOK_DELIVERIES_QUEUE_NAME).toBe('webhook-deliveries');
+      expect(WEBHOOK_DELIVERY_STATUS.PENDING).toBe('PENDING');
+      expect(WEBHOOK_DELIVERY_STATUS.PROCESSING).toBe('PROCESSING');
+      expect(WEBHOOK_DELIVERY_STATUS.RETRYING).toBe('RETRYING');
+      expect(WEBHOOK_DELIVERY_STATUS.DELIVERED).toBe('DELIVERED');
+      expect(WEBHOOK_DELIVERY_STATUS.FAILED).toBe('FAILED');
+
+      expect(WEBHOOK_OUTBOX_STATUS.PENDING).toBe('PENDING');
+      expect(WEBHOOK_OUTBOX_STATUS.PROCESSING).toBe('PROCESSING');
+      expect(WEBHOOK_OUTBOX_STATUS.COMPLETED).toBe('COMPLETED');
+      expect(WEBHOOK_OUTBOX_STATUS.FAILED).toBe('FAILED');
+    });
+
+    it('should define bounded webhook retry and backoff configuration', () => {
+      expect(WEBHOOK_RETRY_CONFIG.MAX_ATTEMPTS).toBe(6);
+      expect(WEBHOOK_RETRY_CONFIG.BASE_DELAY_MS).toBe(30000);
+      expect(WEBHOOK_RETRY_CONFIG.MAX_DELAY_MS).toBe(7200000);
+      expect(WEBHOOK_RETRY_CONFIG.JITTER_FACTOR).toBe(0.2);
+      expect(WEBHOOK_RETRY_CONFIG.DELIVERY_TIMEOUT_MS).toBe(10000);
+      expect(WEBHOOK_RETRY_CONFIG.MAX_RESPONSE_PREVIEW_BYTES).toBe(1024);
+    });
+
+    it('should define webhook attempt statuses and recoverable lease configuration', () => {
+      expect(WEBHOOK_ATTEMPT_STATUS.STARTED).toBe('STARTED');
+      expect(WEBHOOK_ATTEMPT_STATUS.SUCCESS).toBe('SUCCESS');
+      expect(WEBHOOK_ATTEMPT_STATUS.FAILED).toBe('FAILED');
+      expect(WEBHOOK_ATTEMPT_STATUS.ABANDONED).toBe('ABANDONED');
+
+      expect(WEBHOOK_LEASE_CONFIG.OUTBOX_LEASE_TIMEOUT_MS).toBe(60000);
+      expect(WEBHOOK_LEASE_CONFIG.DELIVERY_LEASE_TIMEOUT_MS).toBe(120000);
     });
   });
 });

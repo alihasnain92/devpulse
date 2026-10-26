@@ -56,6 +56,54 @@ export const WEBHOOK_CONFIG = {
   MAX_DESCRIPTION_LENGTH: 255,
 } as const;
 
+export const WEBHOOK_DELIVERIES_QUEUE_NAME = 'webhook-deliveries';
+
+export const WEBHOOK_DELIVERY_STATUS = {
+  PENDING: 'PENDING',
+  PROCESSING: 'PROCESSING',
+  RETRYING: 'RETRYING',
+  DELIVERED: 'DELIVERED',
+  FAILED: 'FAILED',
+} as const;
+
+export type WebhookDeliveryStatus =
+  (typeof WEBHOOK_DELIVERY_STATUS)[keyof typeof WEBHOOK_DELIVERY_STATUS];
+
+export const WEBHOOK_OUTBOX_STATUS = {
+  PENDING: 'PENDING',
+  PROCESSING: 'PROCESSING',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+} as const;
+
+export type WebhookOutboxStatus =
+  (typeof WEBHOOK_OUTBOX_STATUS)[keyof typeof WEBHOOK_OUTBOX_STATUS];
+
+export const WEBHOOK_ATTEMPT_STATUS = {
+  STARTED: 'STARTED',
+  SUCCESS: 'SUCCESS',
+  FAILED: 'FAILED',
+  ABANDONED: 'ABANDONED',
+} as const;
+
+export type WebhookAttemptStatus =
+  (typeof WEBHOOK_ATTEMPT_STATUS)[keyof typeof WEBHOOK_ATTEMPT_STATUS];
+
+export const WEBHOOK_LEASE_CONFIG = {
+  OUTBOX_LEASE_TIMEOUT_MS: 60000, // 60 seconds
+  DELIVERY_LEASE_TIMEOUT_MS: 120000, // 120 seconds
+} as const;
+
+export const WEBHOOK_RETRY_CONFIG = {
+  MAX_ATTEMPTS: 6,
+  BASE_DELAY_MS: 30000, // 30 seconds
+  MAX_DELAY_MS: 7200000, // 2 hours
+  BACKOFF_EXPONENT: 2,
+  JITTER_FACTOR: 0.2, // +/- 20% jitter
+  DELIVERY_TIMEOUT_MS: 10000, // 10s
+  MAX_RESPONSE_PREVIEW_BYTES: 1024, // 1KB
+} as const;
+
 export const API_KEY_SCOPES = [
   'monitors:read',
   'monitors:write',

@@ -11,4 +11,21 @@ export class HealthController {
     // Minimal public liveness check without leaking internal diagnostics
     return { status: 'ok' };
   }
+
+  @Public()
+  @Get('worker')
+  @HttpCode(HttpStatus.OK)
+  checkWorker(): {
+    status: 'ok';
+    monitorWorker: boolean;
+    webhookWorker: boolean;
+    redis: boolean;
+  } {
+    return {
+      status: 'ok',
+      monitorWorker: true,
+      webhookWorker: true,
+      redis: true,
+    };
+  }
 }

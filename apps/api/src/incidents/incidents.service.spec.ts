@@ -70,6 +70,19 @@ describe('IncidentsService (Unit)', () => {
         checkResult: {
           findMany: jest.fn(),
         },
+        monitor: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: mockMonitorId,
+            name: 'API Gateway',
+            userId: 'usr-1',
+          }),
+        },
+        webhookEvent: {
+          create: jest.fn().mockResolvedValue({ id: 'evt-1' }),
+        },
+        webhookOutbox: {
+          create: jest.fn().mockResolvedValue({ id: 'outbox-1' }),
+        },
       };
     });
 
@@ -177,6 +190,23 @@ describe('IncidentsService (Unit)', () => {
       expect(result?.state).toBe('ongoing');
       expect(result?.isResolved).toBe(false);
       expect(result?.cause).toContain('HTTP 503');
+
+      // Verify WebhookEvent and Outbox were atomically written to transaction
+      expect(mockTx.webhookEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: 'usr-1',
+          type: 'incident.created',
+          sourceType: 'incident',
+          sourceId: 'inc-1',
+          dedupeKey: 'incident.created:inc-1',
+        }),
+      });
+      expect(mockTx.webhookOutbox.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          eventId: 'evt-1',
+          status: 'PENDING',
+        }),
+      });
     });
 
     it('Scenario 4: Further failures while an incident is active should not create duplicates', async () => {
@@ -281,6 +311,23 @@ describe('IncidentsService (Unit)', () => {
       expect(result?.isResolved).toBe(true);
       expect(result?.resolvedAt).toBe(resolvedAt.toISOString());
       expect(result?.durationSeconds).toBe(300); // 5 minutes = 300s
+
+      // Verify WebhookEvent and Outbox were atomically written to transaction
+      expect(mockTx.webhookEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: 'usr-1',
+          type: 'incident.resolved',
+          sourceType: 'incident',
+          sourceId: 'inc-to-resolve',
+          dedupeKey: 'incident.resolved:inc-to-resolve',
+        }),
+      });
+      expect(mockTx.webhookOutbox.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          eventId: 'evt-1',
+          status: 'PENDING',
+        }),
+      });
     });
 
     it('Scenario 7: Stale recovery check timestamped prior to incident start should NOT resolve the incident', async () => {

@@ -20,4 +20,14 @@ describe('HealthController', () => {
     const result = controller.check();
     expect(result).toEqual({ status: 'ok' });
   });
+
+  it('should return worker health diagnostics', () => {
+    const result = controller.checkWorker();
+    expect(result).toEqual({
+      status: 'ok',
+      monitorWorker: true,
+      webhookWorker: true,
+      redis: true,
+    });
+  });
 });

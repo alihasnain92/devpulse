@@ -33,15 +33,17 @@ flowchart TD
         Postgres[("PostgreSQL 16<br/>(Port 5433 / Prisma 7)")]
     end
 
-    subgraph monitoring_engine [Async Monitoring Engine]
+    subgraph monitoring_engine [Async Monitoring & Delivery Engine]
         Scheduler["Scheduler Service<br/>(BullMQ JobScheduler)"]
-        Worker["Standalone Worker Process<br/>(apps/api/src/worker.ts)"]
-        SSRF["SSRF-Hardened HTTP Client<br/>(Socket Pinning + CIDR Filter)"]
+        MonitorWorker["Monitoring Worker<br/>(queue: monitor-checks)"]
+        OutboxPublisher["Outbox Publisher<br/>(FOR UPDATE SKIP LOCKED)"]
+        WebhookWorker["Webhook Delivery Worker<br/>(queue: webhook-deliveries)"]
+        SSRF["SSRF-Hardened Client<br/>(Socket Pinning + CIDR Filter)"]
     end
 
-    subgraph target_infra [Target Infrastructure]
-        TargetA["External Target API (200 OK)"]
-        TargetB["Degraded Target API (500 Error)"]
+    subgraph target_infra [Target Infrastructure & Endpoints]
+        TargetAPI["External Target API (Health Probes)"]
+        WebhookDest["Customer Webhook Endpoint (HMAC-Signed)"]
     end
 
     Browser -->|"HTTPS / UI Requests"| Frontend
@@ -49,11 +51,16 @@ flowchart TD
     API -->|"Read / Write State"| Postgres
     API -->|"Dispatch Jobs & Sync"| Redis
     Scheduler -->|"Recurring Tick Schedules"| Redis
-    Worker -->|"Consume Health Check Jobs"| Redis
-    Worker -->|"1. Resolve DNS & Pin Socket"| SSRF
-    SSRF -->|"2. Outbound Probe (Outside DB Tx)"| TargetA
-    SSRF -->|"2. Outbound Probe (Outside DB Tx)"| TargetB
-    Worker -->|"3. Persist Check & Eval Incident (Short Tx)"| Postgres
+    MonitorWorker -->|"Consume Health Check Jobs"| Redis
+    MonitorWorker -->|"1. Resolve DNS & Pin Socket"| SSRF
+    SSRF -->|"2. Outbound Probe (Outside DB Tx)"| TargetAPI
+    MonitorWorker -->|"3. Persist Check & Outbox Event"| Postgres
+    OutboxPublisher -->|"Poll Outbox (SKIP LOCKED)"| Postgres
+    OutboxPublisher -->|"Fanout Webhook Jobs"| Redis
+    WebhookWorker -->|"Consume Delivery Jobs"| Redis
+    WebhookWorker -->|"Delivery-Time SSRF & HMAC Sign"| SSRF
+    SSRF -->|"POST Payload (Strict No-Redirect)"| WebhookDest
+    WebhookWorker -->|"Persist Delivery Attempt"| Postgres
     API -->|"Aggregate Telemetry & Incidents"| Browser
 ```
 
@@ -143,6 +150,35 @@ Database connections are protected against exhaustion:
 - **Explicit Least-Privilege Scoping**: Granular scope enforcement (`monitors:read`, `monitors:write`, `incidents:read`, `webhooks:read`, `webhooks:write`) via `@RequireScopes()` decorators and global guard evaluation.
 - **Automated CSRF Exemption**: Programmatic API key requests without ambient browser session cookies are exempt from CSRF checks while retaining strict origin/cookie security for browser clients.
 - **Usage Auditing**: Automatically records asynchronous `lastUsedAt` timestamps on each successful invocation without delaying request latency.
+
+### 8. Reliable Webhook Event Delivery Pipeline (Level 2, Phase 8)
+- **Transactional Outbox Architecture**: Durable transactional event capture with automatic outbox recovery and at-least-once webhook delivery. During incident transitions (`incident.created` and `incident.resolved`), `WebhookEvent` and `WebhookOutbox` records are persisted atomically inside the incident transaction. Zero network or queue I/O occurs within the database transaction.
+- **Recoverable Leases & Crash Window Resolution**:
+  - *Outbox Crash Before Enqueue*: Outbox rows are claimed with a bounded 60-second lease timestamp (`claimedAt`). If a publisher process crashes while an outbox record is marked `PROCESSING`, subsequent polling ticks or worker restarts automatically reclaim stale rows (`claimedAt <= NOW() - 60s`) without human intervention.
+  - *Outbox Crash After Queue Enqueue*: Delivery rows are uniquely indexed on `(eventId, endpointId)` and enqueued to BullMQ using deterministic job IDs (`webhook-delivery:${deliveryId}`). On recovery, existing jobs in Redis or completed delivery states are reconciled cleanly, safely completing outbox records without duplicate deliveries.
+  - *Crash During HTTP Dispatch*: A durable `WebhookAttempt` record is persisted in `STARTED` status **before** the network request begins. If the worker crashes mid-flight, the outcome remains unknown; on recovery, the interrupted attempt is marked `ABANDONED` (retained for auditing) and a new attempt number is atomically allocated via PostgreSQL `SELECT ... FOR UPDATE` row locks.
+  - *Stale Delivery Recovery*: Deliveries stuck in `PROCESSING` past a 120-second lease (`claimedAt <= NOW() - 120s`) are automatically detected and recovered by the publisher poller.
+- **Durable Event Deduplication**: Events carry deterministic deduplication keys (`incident.created:<incidentId>`, `incident.resolved:<incidentId>`) backed by a PostgreSQL unique constraint on `(tenant_id, deduplication_key)`.
+- **Concurrent Fanout Publisher**: The standalone `WebhookOutboxPublisherService` continuously polls pending and stale outbox rows using `SELECT ... FOR UPDATE SKIP LOCKED` bounded batches. It resolves matching subscribed endpoints, reconciles existing delivery state, enqueues missing BullMQ jobs, and marks outbox items as `COMPLETED`.
+- **Delivery-Time SSRF & Socket Pinning**: Webhook destination URLs undergo fresh DNS resolution and CIDR validation at dispatch time via `WebhookHttpClientService`. Pinned TCP sockets enforce connections strictly to the validated IP, eliminating Time-of-Check to Time-of-Use (TOCTOU) DNS rebinding attacks.
+- **Strict No-Redirect Policy**: Outbound delivery treats HTTP 3xx responses (301, 302, 307, 308) strictly as delivery failures. Redirects are never followed, completely eliminating SSRF redirect pivots to internal cloud services.
+- **Versioned HMAC-SHA256 Signatures**: Each outbound HTTP POST request is signed in memory and delivers standardized enterprise headers:
+  - `Content-Type: application/json`
+  - `User-Agent: DevPulse-Webhook/1.0`
+  - `X-DevPulse-Event-Id: <uuid>`
+  - `X-DevPulse-Delivery-Id: <uuid>`
+  - `X-DevPulse-Event-Type: incident.created | incident.resolved`
+  - `X-DevPulse-Timestamp: <epoch_seconds>`
+  - `X-DevPulse-Signature: t=${epoch_seconds},v1=${hmac_sha256}`
+- **At-Least-Once Delivery Semantics**: Delivery is guaranteed at least once across transient network partitions and worker restarts. Receivers should deduplicate inbound requests by caching the immutable `X-DevPulse-Event-Id`. Exactly-once HTTP delivery is not claimed or possible over unreliable networks.
+- **Exponential Backoff & Smart Retries**:
+  - Maximum of 6 attempts total (initial attempt + 5 retries).
+  - Delay schedule: attempt 2 (~30s), attempt 3 (~2m), attempt 4 (~8m), attempt 5 (~32m), attempt 6 (~2h).
+  - Bounded randomized jitter (10–25%) prevents thundering herd retry spikes on external webhook receivers.
+  - **Permanent Failure Classification**: Client errors (HTTP 4xx except 408/429) immediately terminate retries, setting delivery status to `FAILED`.
+  - **Transient Failure Classification**: Server errors (HTTP 5xx), timeouts (408), rate limits (429), and network errors trigger automatic exponential backoff.
+- **Durable Attempt History**: Every dispatch attempt persists a `WebhookAttempt` row recording the attempt number, latency in milliseconds, HTTP status code, sanitized error details, and a capped 1 KB response preview (`responseBodyPreview`).
+- **Worker Health Diagnostics**: The REST API exposes `GET /health/worker`, reporting operational diagnostics for both `monitorWorker` (queue `monitor-checks`), `webhookWorker` (queue `webhook-deliveries`), and shared `redis` connectivity.
 
 ---
 
@@ -246,11 +282,12 @@ All integration and smoke tests dynamically reroute database connections to `dev
    - Short-lived Access Tokens (15m) and long-lived Refresh Tokens (7d) transmitted in `HttpOnly`, `SameSite=Lax` cookies.
    - Cryptographic refresh token rotation: each refresh token can only be used once. Attempted reuse immediately revokes the entire token family.
    - Per-user tenant isolation: all database queries verify `userId` ownership at the query level.
-2. **SSRF Mitigation**:
-   - Strict IP classification preventing internal loopback, private RFC1918 subnets, and cloud metadata access.
-   - Pinned socket connections neutralizing DNS rebinding attacks.
+2. **SSRF Mitigation & Outbound Security**:
+   - Strict IP classification preventing internal loopback, private RFC1918 subnets, link-local, and cloud metadata access.
+   - Socket-level IP pinning on both health checks and webhook dispatches, neutralizing DNS rebinding attacks.
+   - Strict no-redirect policy on webhook deliveries: HTTP 3xx responses are treated as delivery failures and never followed.
 3. **Resilience & Rate Limiting**:
-   - Outbound probe timeouts (1-30s) and max response payload limits (100KB).
+   - Outbound probe timeouts (1-30s) and max response payload limits (100KB for probes, 1KB preview for webhooks).
    - Structured error handling with zero internal stack trace exposure.
 4. **Webhook Security & HMAC Verification**:
    - Webhook signing secrets are encrypted at rest with AES-256-GCM.
@@ -266,7 +303,8 @@ All integration and smoke tests dynamically reroute database connections to `dev
 ## Level 2 Roadmap & Future Enhancements
 
 - [x] **Webhook Registration & Security (Phase 7)**: User-managed webhooks, AES-256-GCM secret encryption, versioned HMAC-SHA256 signatures, and scoped programmatic API keys.
-- [ ] **Webhook Event Delivery Pipeline & Retry Engine (Phase 8)**: Asynchronous event queueing, exponential backoff retries, delivery attempt logs, and manual redelivery.
+- [x] **Reliable Webhook Event Delivery Pipeline (Phase 8)**: Transactional outbox pattern, BullMQ delivery queue, socket-pinned delivery-time SSRF defenses, strict no-redirect policy, exponential backoff with jitter (up to 6 attempts), and durable attempt history.
+- [ ] **Webhook Replay, Delivery History UI & Dead-Letter Handling (Phase 9)**: Manual replay triggers, endpoint delivery logs in Settings UI, attempt inspector, and dead-letter queues.
 - [ ] **Multi-Channel Alerting**: Native integrations for Slack webhooks, Discord webhooks, PagerDuty, and email alerts via SendGrid/SES.
 - [ ] **Multi-Region Monitoring Probes**: Distributed worker nodes running in US-East, EU-Central, and AP-East to detect regional outages.
 - [ ] **Public Status Pages**: White-label public status dashboards with incident post-mortems and custom domains.
