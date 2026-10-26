@@ -1,9 +1,12 @@
 import {
   AuthResponseDto,
+  CreateMonitorRequestDto,
   LoginRequestDto,
   MessageResponseDto,
+  MonitorDto,
   RegisterRequestDto,
   SECURITY_CONFIG,
+  UpdateMonitorRequestDto,
   UserDto,
 } from '@devpulse/shared';
 
@@ -120,5 +123,36 @@ export const apiClient = {
 
   async getMe(): Promise<UserDto> {
     return request<UserDto>('/users/me');
+  },
+
+  async getMonitors(): Promise<MonitorDto[]> {
+    return request<MonitorDto[]>('/monitors');
+  },
+
+  async getMonitor(id: string): Promise<MonitorDto> {
+    return request<MonitorDto>(`/monitors/${id}`);
+  },
+
+  async createMonitor(dto: CreateMonitorRequestDto): Promise<MonitorDto> {
+    return request<MonitorDto>('/monitors', {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    });
+  },
+
+  async updateMonitor(
+    id: string,
+    dto: UpdateMonitorRequestDto,
+  ): Promise<MonitorDto> {
+    return request<MonitorDto>(`/monitors/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(dto),
+    });
+  },
+
+  async deleteMonitor(id: string): Promise<MessageResponseDto> {
+    return request<MessageResponseDto>(`/monitors/${id}`, {
+      method: 'DELETE',
+    });
   },
 };

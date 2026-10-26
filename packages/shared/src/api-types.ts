@@ -46,6 +46,25 @@ export interface MonitorDto {
   updatedAt: string;
 }
 
+export interface CreateMonitorRequestDto {
+  name: string;
+  url: string;
+  method?: HttpMethod;
+  intervalSeconds?: number;
+  timeoutMs?: number;
+  expectedStatus?: number;
+}
+
+export interface UpdateMonitorRequestDto {
+  name?: string;
+  url?: string;
+  method?: HttpMethod;
+  intervalSeconds?: number;
+  timeoutMs?: number;
+  expectedStatus?: number;
+  isPaused?: boolean;
+}
+
 export interface CheckResultDto {
   id: string;
   monitorId: string;
