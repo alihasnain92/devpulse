@@ -69,6 +69,19 @@ export const WEBHOOK_DELIVERY_STATUS = {
 export type WebhookDeliveryStatus =
   (typeof WEBHOOK_DELIVERY_STATUS)[keyof typeof WEBHOOK_DELIVERY_STATUS];
 
+export const WEBHOOK_DELIVERY_ORIGIN = {
+  AUTOMATIC: 'AUTOMATIC',
+  MANUAL_REPLAY: 'MANUAL_REPLAY',
+} as const;
+
+export type WebhookDeliveryOrigin =
+  (typeof WEBHOOK_DELIVERY_ORIGIN)[keyof typeof WEBHOOK_DELIVERY_ORIGIN];
+
+export const WEBHOOK_PAGINATION_CONFIG = {
+  DEFAULT_LIMIT: 25,
+  MAX_LIMIT: 100,
+} as const;
+
 export const WEBHOOK_OUTBOX_STATUS = {
   PENDING: 'PENDING',
   PROCESSING: 'PROCESSING',

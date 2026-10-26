@@ -25,6 +25,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  History,
   Key,
   Plus,
   RefreshCw,
@@ -32,12 +33,15 @@ import {
   Trash2,
   Webhook,
 } from 'lucide-react';
+import { DeliveriesTab } from './deliveries-tab';
 
 export default function SettingsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = React.useState<'webhooks' | 'apikeys'>('webhooks');
+  const [activeTab, setActiveTab] = React.useState<
+    'webhooks' | 'deliveries' | 'apikeys'
+  >('webhooks');
 
   // Webhooks State
   const [webhooks, setWebhooks] = React.useState<WebhookEndpointDto[]>([]);
@@ -329,6 +333,18 @@ export default function SettingsPage() {
           </button>
 
           <button
+            onClick={() => setActiveTab('deliveries')}
+            className={`flex items-center gap-2 pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'deliveries'
+                ? 'border-blue-500 text-blue-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <History className="h-4 w-4" />
+            <span>Deliveries</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('apikeys')}
             className={`flex items-center gap-2 pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'apikeys'
@@ -470,7 +486,12 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* TAB 2: API KEYS */}
+        {/* TAB 2: DELIVERIES */}
+        {activeTab === 'deliveries' && (
+          <DeliveriesTab webhooks={webhooks} />
+        )}
+
+        {/* TAB 3: API KEYS */}
         {activeTab === 'apikeys' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

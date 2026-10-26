@@ -312,7 +312,7 @@ describe('WebhookDeliveryService (Unit)', () => {
         { deliveryId },
         expect.objectContaining({
           delay: expect.any(Number),
-          jobId: `webhook-delivery:${deliveryId}:attempt-2`,
+          jobId: `webhook-delivery-${deliveryId}-attempt-2`,
         }),
       );
     });

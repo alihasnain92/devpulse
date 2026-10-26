@@ -254,7 +254,7 @@ describe('Webhook Delivery Pipeline (Integration - Live PostgreSQL)', () => {
       expect(mockQueue.add).toHaveBeenCalledWith(
         'webhook-delivery',
         { deliveryId: deliveries[0].id },
-        expect.objectContaining({ jobId: `webhook-delivery:${deliveries[0].id}` }),
+        expect.objectContaining({ jobId: `webhook-delivery-${deliveries[0].id}` }),
       );
     });
   });
@@ -427,6 +427,8 @@ describe('Webhook Delivery Pipeline (Integration - Live PostgreSQL)', () => {
         data: {
           eventId: testEvent.id,
           endpointId: endpointA1Id,
+          endpointName: 'Primary Webhook A1',
+          destinationUrl: 'https://webhook.site/test-1',
           status: WEBHOOK_DELIVERY_STATUS.PENDING,
         },
       });
@@ -522,13 +524,15 @@ describe('Webhook Delivery Pipeline (Integration - Live PostgreSQL)', () => {
         data: {
           eventId: event.id,
           endpointId: endpointA1Id,
+          endpointName: 'Primary Webhook A1',
+          destinationUrl: 'https://webhook.site/test-1',
           status: 'PENDING',
         },
       });
 
       // Mock BullMQ reporting that the job is already present in queue
       mockQueue.getJob.mockImplementation(async (jobId: string) => {
-        if (jobId === `webhook-delivery:${delivery.id}`) {
+        if (jobId === `webhook-delivery-${delivery.id}`) {
           return { id: jobId, getState: async () => 'waiting' };
         }
         return null;
@@ -595,12 +599,14 @@ describe('Webhook Delivery Pipeline (Integration - Live PostgreSQL)', () => {
         data: {
           eventId: event.id,
           endpointId: endpointA1Id,
+          endpointName: 'Primary Webhook A1',
+          destinationUrl: 'https://webhook.site/test-1',
           status: 'PENDING',
         },
       });
 
       mockQueue.getJob.mockImplementation(async (jobId: string) => {
-        if (jobId === `webhook-delivery:${existingDelivery.id}`) {
+        if (jobId === `webhook-delivery-${existingDelivery.id}`) {
           return { id: jobId };
         }
         return null;
@@ -629,6 +635,9 @@ describe('Webhook Delivery Pipeline (Integration - Live PostgreSQL)', () => {
       expect(updatedOutbox?.status).toBe('COMPLETED');
 
       // Cleanup endpointA3
+      await prisma.webhookDelivery.deleteMany({
+        where: { endpointId: endpointA3.endpoint.id },
+      });
       await prisma.webhookEndpoint.delete({
         where: { id: endpointA3.endpoint.id },
       });
@@ -651,6 +660,8 @@ describe('Webhook Delivery Pipeline (Integration - Live PostgreSQL)', () => {
         data: {
           eventId: testEvent.id,
           endpointId: endpointA1Id,
+          endpointName: 'Primary Webhook A1',
+          destinationUrl: 'https://webhook.site/test-1',
           status: 'PENDING',
         },
       });
@@ -711,6 +722,8 @@ describe('Webhook Delivery Pipeline (Integration - Live PostgreSQL)', () => {
         data: {
           eventId: testEvent.id,
           endpointId: endpointA1Id,
+          endpointName: 'Primary Webhook A1',
+          destinationUrl: 'https://webhook.site/test-1',
           status: 'PROCESSING',
           attemptCount: 1,
           claimedAt: new Date(Date.now() - 130000), // > 120s lease
@@ -779,6 +792,8 @@ describe('Webhook Delivery Pipeline (Integration - Live PostgreSQL)', () => {
         data: {
           eventId: testEvent.id,
           endpointId: endpointA1Id,
+          endpointName: 'Primary Webhook A1',
+          destinationUrl: 'https://webhook.site/test-1',
           status: 'PENDING',
           attemptCount: 0,
         },

@@ -8,6 +8,7 @@ import { Queue } from 'bullmq';
 import {
   WEBHOOK_ATTEMPT_STATUS,
   WEBHOOK_DELIVERIES_QUEUE_NAME,
+  WEBHOOK_DELIVERY_ORIGIN,
   WEBHOOK_DELIVERY_STATUS,
   WEBHOOK_LEASE_CONFIG,
   WEBHOOK_OUTBOX_STATUS,
@@ -169,11 +170,12 @@ export class WebhookOutboxPublisherService
               continue;
             }
 
-            // 3. Delivery expansion: Find all enabled endpoints subscribing to this event type
+            // 3. Delivery expansion: Find all active (non-deleted) enabled endpoints subscribing to this event type
             const endpoints = await this.prisma.webhookEndpoint.findMany({
               where: {
                 userId: event.userId,
                 isEnabled: true,
+                deletedAt: null,
                 events: { has: event.type },
               },
             });
@@ -197,13 +199,12 @@ export class WebhookOutboxPublisherService
 
             // 4. Create WebhookDelivery rows and dispatch BullMQ jobs (Reconciliation & Safe Partial Fanout)
             for (const endpoint of endpoints) {
-              // Idempotent delivery creation using unique (eventId, endpointId)
-              let delivery = await this.prisma.webhookDelivery.findUnique({
+              // Idempotent delivery creation using origin: AUTOMATIC and (eventId, endpointId)
+              let delivery = await this.prisma.webhookDelivery.findFirst({
                 where: {
-                  eventId_endpointId: {
-                    eventId: event.id,
-                    endpointId: endpoint.id,
-                  },
+                  eventId: event.id,
+                  endpointId: endpoint.id,
+                  origin: WEBHOOK_DELIVERY_ORIGIN.AUTOMATIC,
                 },
               });
 
@@ -213,18 +214,20 @@ export class WebhookOutboxPublisherService
                     data: {
                       eventId: event.id,
                       endpointId: endpoint.id,
+                      endpointName: endpoint.name,
+                      destinationUrl: endpoint.url,
+                      origin: WEBHOOK_DELIVERY_ORIGIN.AUTOMATIC,
                       status: WEBHOOK_DELIVERY_STATUS.PENDING,
                       attemptCount: 0,
                     },
                   });
                 } catch {
                   // Handle possible concurrent creation race
-                  delivery = await this.prisma.webhookDelivery.findUnique({
+                  delivery = await this.prisma.webhookDelivery.findFirst({
                     where: {
-                      eventId_endpointId: {
-                        eventId: event.id,
-                        endpointId: endpoint.id,
-                      },
+                      eventId: event.id,
+                      endpointId: endpoint.id,
+                      origin: WEBHOOK_DELIVERY_ORIGIN.AUTOMATIC,
                     },
                   });
                 }
@@ -248,7 +251,7 @@ export class WebhookOutboxPublisherService
               }
 
               // Enqueue BullMQ delivery job with deterministic job ID
-              const jobId = `webhook-delivery:${delivery.id}`;
+              const jobId = `webhook-delivery-${delivery.id}`;
               try {
                 let jobAlreadyExists = false;
                 if (typeof queue.getJob === 'function') {
@@ -323,6 +326,9 @@ export class WebhookOutboxPublisherService
 
       // 6. Automatically rescue any deliveries stuck in PROCESSING beyond delivery lease timeout
       await this.recoverStaleDeliveries();
+
+      // 7. Automatically rescue any orphaned PENDING manual replays whose initial enqueue failed
+      await this.recoverPendingReplays();
     } catch (err: unknown) {
       this.logger.error(
         `Error executing outbox claim transaction: ${(err as Error).message}`,
@@ -413,7 +419,7 @@ export class WebhookOutboxPublisherService
           },
         });
 
-        const retryJobId = `webhook-delivery:${delivery.id}:attempt-${delivery.attemptCount + 1}`;
+        const retryJobId = `webhook-delivery-${delivery.id}-attempt-${delivery.attemptCount + 1}`;
         try {
           let jobExists = false;
           if (typeof queue.getJob === 'function') {
@@ -446,6 +452,115 @@ export class WebhookOutboxPublisherService
     } catch (err: unknown) {
       this.logger.error(
         `Error during stale delivery recovery: ${(err as Error).message}`,
+      );
+    }
+
+    return recovered;
+  }
+
+  /**
+   * Rescues orphaned manual replay deliveries that remain in PENDING status
+   * because Redis/BullMQ was temporarily unavailable when the user submitted the replay.
+   *
+   * Idempotency & Safety:
+   * 1. Bounded batch querying of PENDING manual replays.
+   * 2. Verifies destination endpoint exists, is not soft-deleted, and is enabled.
+   * 3. Checks BullMQ for existing deterministic job ID (webhook-delivery-${delivery.id}-initial).
+   * 4. Enqueues missing job without duplication.
+   * 5. Catches Redis connection errors gracefully without busy-looping.
+   */
+  async recoverPendingReplays(batchSize = 50): Promise<number> {
+    let recovered = 0;
+    try {
+      const pendingReplays = await this.prisma.webhookDelivery.findMany({
+        where: {
+          status: WEBHOOK_DELIVERY_STATUS.PENDING,
+          origin: WEBHOOK_DELIVERY_ORIGIN.MANUAL_REPLAY,
+        },
+        include: { endpoint: true },
+        take: batchSize,
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (pendingReplays.length === 0) {
+        return 0;
+      }
+
+      this.logger.debug(
+        `Checking ${pendingReplays.length} PENDING manual replays for queue reconciliation...`,
+      );
+
+      const queue = this.getQueue();
+
+      for (const delivery of pendingReplays) {
+        // 1. Verify endpoint state
+        if (!delivery.endpoint || delivery.endpoint.deletedAt) {
+          this.logger.warn(
+            `Pending replay delivery ${delivery.id} aborted: endpoint was deleted. Marked FAILED.`,
+          );
+          await this.prisma.webhookDelivery.update({
+            where: { id: delivery.id },
+            data: {
+              status: WEBHOOK_DELIVERY_STATUS.FAILED,
+              lastErrorCode: 'ENDPOINT_DELETED',
+              nextAttemptAt: null,
+            },
+          });
+          continue;
+        }
+
+        if (!delivery.endpoint.isEnabled) {
+          this.logger.log(
+            `Pending replay delivery ${delivery.id} aborted: endpoint ${delivery.endpoint.id} is disabled. Marked FAILED.`,
+          );
+          await this.prisma.webhookDelivery.update({
+            where: { id: delivery.id },
+            data: {
+              status: WEBHOOK_DELIVERY_STATUS.FAILED,
+              lastErrorCode: 'ENDPOINT_DISABLED',
+              nextAttemptAt: null,
+            },
+          });
+          continue;
+        }
+
+        // 2. Deterministic job reconciliation
+        const jobId = `webhook-delivery-${delivery.id}-initial`;
+        let jobExists = false;
+        try {
+          if (typeof queue.getJob === 'function') {
+            const existing = await queue.getJob(jobId);
+            if (existing) {
+              jobExists = true;
+            }
+          }
+
+          if (!jobExists) {
+            await queue.add(
+              'webhook-delivery',
+              { deliveryId: delivery.id },
+              {
+                jobId,
+                removeOnComplete: 1000,
+                removeOnFail: 5000,
+              },
+            );
+            recovered++;
+            this.logger.log(
+              `Reconciled orphaned PENDING replay delivery ${delivery.id} into BullMQ queue`,
+            );
+          }
+        } catch (queueErr: unknown) {
+          this.logger.error(
+            `Failed to reconcile pending replay ${delivery.id} to BullMQ: ${(queueErr as Error).message}. Will retry on next poller tick.`,
+          );
+          // If Redis is down, break loop to avoid busy-looping on the remaining batch
+          break;
+        }
+      }
+    } catch (err: unknown) {
+      this.logger.error(
+        `Error during pending replay recovery: ${(err as Error).message}`,
       );
     }
 

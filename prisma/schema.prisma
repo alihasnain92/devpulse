@@ -111,6 +111,7 @@ model WebhookEndpoint {
   events          String[]
   isEnabled       Boolean  @default(true)
   encryptedSecret String
+  deletedAt       DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -118,6 +119,7 @@ model WebhookEndpoint {
   deliveries      WebhookDelivery[]
 
   @@index([userId])
+  @@index([userId, deletedAt])
   @@map("webhook_endpoints")
 }
 
@@ -180,25 +182,37 @@ model WebhookOutbox {
 }
 
 model WebhookDelivery {
-  id             String    @id @default(uuid())
-  eventId        String
-  endpointId     String
-  status         String    @default("PENDING")
-  attemptCount   Int       @default(0)
-  claimedAt      DateTime?
-  nextAttemptAt  DateTime?
-  deliveredAt    DateTime?
-  lastHttpStatus Int?
-  lastErrorCode  String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id                   String    @id @default(uuid())
+  eventId              String
+  endpointId           String
+  endpointName         String
+  destinationUrl       String
+  origin               String    @default("AUTOMATIC")
+  replayOfId           String?
+  replayIdempotencyKey String?
+  status               String    @default("PENDING")
+  attemptCount         Int       @default(0)
+  claimedAt            DateTime?
+  nextAttemptAt        DateTime?
+  deliveredAt          DateTime?
+  lastHttpStatus       Int?
+  lastErrorCode        String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  event          WebhookEvent    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  endpoint       WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
-  attempts       WebhookAttempt[]
+  event                WebhookEvent      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  endpoint             WebhookEndpoint   @relation(fields: [endpointId], references: [id], onDelete: Restrict)
+  replayOf             WebhookDelivery?  @relation("WebhookDeliveryReplay", fields: [replayOfId], references: [id], onDelete: SetNull)
+  replays              WebhookDelivery[] @relation("WebhookDeliveryReplay")
+  attempts             WebhookAttempt[]
 
-  @@unique([eventId, endpointId])
   @@index([endpointId])
+  @@index([endpointId, createdAt])
+  @@index([status, createdAt])
+  @@index([origin, createdAt])
+  @@index([replayOfId])
+  @@index([replayIdempotencyKey])
+  @@index([createdAt])
   @@index([status, nextAttemptAt])
   @@index([status, claimedAt])
   @@map("webhook_deliveries")

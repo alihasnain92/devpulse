@@ -1,5 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { WEBHOOK_OUTBOX_STATUS } from '@devpulse/shared';
+import {
+  WEBHOOK_DELIVERY_STATUS,
+  WEBHOOK_OUTBOX_STATUS,
+} from '@devpulse/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WebhookOutboxPublisherService } from './webhook-outbox-publisher.service';
 
@@ -20,6 +23,7 @@ describe('WebhookOutboxPublisherService (Unit)', () => {
     },
     webhookDelivery: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn(),
       update: jest.fn(),
@@ -91,7 +95,7 @@ describe('WebhookOutboxPublisherService (Unit)', () => {
     mockPrisma.webhookEndpoint.findMany.mockResolvedValue(mockEndpoints);
 
     // 4. Delivery creation mocks
-    mockPrisma.webhookDelivery.findUnique.mockResolvedValue(null);
+    mockPrisma.webhookDelivery.findFirst.mockResolvedValue(null);
     mockPrisma.webhookDelivery.create
       .mockResolvedValueOnce({ id: 'del-1', eventId, endpointId: endpoint1Id })
       .mockResolvedValueOnce({ id: 'del-2', eventId, endpointId: endpoint2Id });
@@ -107,12 +111,12 @@ describe('WebhookOutboxPublisherService (Unit)', () => {
     expect(mockQueue.add).toHaveBeenCalledWith(
       'webhook-delivery',
       { deliveryId: 'del-1' },
-      expect.objectContaining({ jobId: 'webhook-delivery:del-1' }),
+      expect.objectContaining({ jobId: 'webhook-delivery-del-1' }),
     );
     expect(mockQueue.add).toHaveBeenCalledWith(
       'webhook-delivery',
       { deliveryId: 'del-2' },
-      expect.objectContaining({ jobId: 'webhook-delivery:del-2' }),
+      expect.objectContaining({ jobId: 'webhook-delivery-del-2' }),
     );
 
     // Verify outbox marked COMPLETED
@@ -167,7 +171,7 @@ describe('WebhookOutboxPublisherService (Unit)', () => {
 
     mockPrisma.webhookEvent.findUnique.mockResolvedValue(mockEvent);
     mockPrisma.webhookEndpoint.findMany.mockResolvedValue([mockEndpoints[0]]);
-    mockPrisma.webhookDelivery.findUnique.mockResolvedValue({ id: 'del-1' });
+    mockPrisma.webhookDelivery.findFirst.mockResolvedValue({ id: 'del-1' });
 
     // Redis failure
     mockQueue.add.mockRejectedValueOnce(new Error('Redis connection refused'));
@@ -218,7 +222,7 @@ describe('WebhookOutboxPublisherService (Unit)', () => {
       mockPrisma.webhookEndpoint.findMany.mockResolvedValue([mockEndpoints[0]]);
 
       // Existing delivery in PENDING
-      mockPrisma.webhookDelivery.findUnique.mockResolvedValue({
+      mockPrisma.webhookDelivery.findFirst.mockResolvedValue({
         id: 'del-existing',
         eventId,
         endpointId: endpoint1Id,
@@ -263,7 +267,7 @@ describe('WebhookOutboxPublisherService (Unit)', () => {
       mockPrisma.webhookEndpoint.findMany.mockResolvedValue(mockEndpoints); // 2 endpoints
 
       // Endpoint 1 has existing delivery and already-enqueued job
-      mockPrisma.webhookDelivery.findUnique
+      mockPrisma.webhookDelivery.findFirst
         .mockResolvedValueOnce({
           id: 'del-1',
           eventId,
@@ -294,7 +298,7 @@ describe('WebhookOutboxPublisherService (Unit)', () => {
       expect(mockQueue.add).toHaveBeenCalledWith(
         'webhook-delivery',
         { deliveryId: 'del-2' },
-        expect.objectContaining({ jobId: 'webhook-delivery:del-2' }),
+        expect.objectContaining({ jobId: 'webhook-delivery-del-2' }),
       );
 
       // Outbox is marked completed now that all endpoints are represented
@@ -350,10 +354,94 @@ describe('WebhookOutboxPublisherService (Unit)', () => {
         'webhook-delivery',
         { deliveryId: 'stale-del-1' },
         expect.objectContaining({
-          jobId: 'webhook-delivery:stale-del-1:attempt-2',
+          jobId: 'webhook-delivery-stale-del-1-attempt-2',
           delay: 5000,
         }),
       );
+    });
+
+    it('recovers orphaned PENDING manual replay deliveries when BullMQ job is missing', async () => {
+      const pendingReplays = [
+        {
+          id: 'replay-del-1',
+          origin: 'MANUAL_REPLAY',
+          status: 'PENDING',
+          attemptCount: 0,
+          endpoint: {
+            id: endpoint1Id,
+            isEnabled: true,
+            deletedAt: null,
+          },
+        },
+      ];
+
+      mockPrisma.webhookDelivery.findMany.mockResolvedValue(pendingReplays);
+      mockQueue.getJob.mockResolvedValue(null);
+
+      const recovered = await service.recoverPendingReplays();
+
+      expect(recovered).toBe(1);
+      expect(mockQueue.add).toHaveBeenCalledWith(
+        'webhook-delivery',
+        { deliveryId: 'replay-del-1' },
+        expect.objectContaining({
+          jobId: 'webhook-delivery-replay-del-1-initial',
+        }),
+      );
+    });
+
+    it('skips duplicate enqueue if BullMQ job for pending replay already exists', async () => {
+      const pendingReplays = [
+        {
+          id: 'replay-del-2',
+          origin: 'MANUAL_REPLAY',
+          status: 'PENDING',
+          attemptCount: 0,
+          endpoint: {
+            id: endpoint1Id,
+            isEnabled: true,
+            deletedAt: null,
+          },
+        },
+      ];
+
+      mockPrisma.webhookDelivery.findMany.mockResolvedValue(pendingReplays);
+      mockQueue.getJob.mockResolvedValue({ id: 'webhook-delivery-replay-del-2-initial' });
+
+      const recovered = await service.recoverPendingReplays();
+
+      expect(recovered).toBe(0);
+      expect(mockQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('marks pending replay FAILED if destination endpoint was deleted', async () => {
+      const pendingReplays = [
+        {
+          id: 'replay-del-3',
+          origin: 'MANUAL_REPLAY',
+          status: 'PENDING',
+          attemptCount: 0,
+          endpoint: {
+            id: endpoint1Id,
+            isEnabled: true,
+            deletedAt: new Date(), // Deleted
+          },
+        },
+      ];
+
+      mockPrisma.webhookDelivery.findMany.mockResolvedValue(pendingReplays);
+
+      const recovered = await service.recoverPendingReplays();
+
+      expect(recovered).toBe(0);
+      expect(mockPrisma.webhookDelivery.update).toHaveBeenCalledWith({
+        where: { id: 'replay-del-3' },
+        data: expect.objectContaining({
+          status: WEBHOOK_DELIVERY_STATUS.FAILED,
+          lastErrorCode: 'ENDPOINT_DELETED',
+        }),
+      });
+      expect(mockQueue.add).not.toHaveBeenCalled();
     });
   });
 });

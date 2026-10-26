@@ -100,7 +100,7 @@ export class WebhookDeliveryService {
     }
 
     // Endpoint State Evaluation
-    if (!delivery.endpoint) {
+    if (!delivery.endpoint || delivery.endpoint.deletedAt) {
       this.logger.warn(
         `Webhook delivery ${deliveryId} aborted: Endpoint was deleted.`,
       );
@@ -491,7 +491,7 @@ export class WebhookDeliveryService {
         { deliveryId: delivery.id },
         {
           delay: delayMs,
-          jobId: `webhook-delivery:${delivery.id}:attempt-${attemptNumber + 1}`,
+          jobId: `webhook-delivery-${delivery.id}-attempt-${attemptNumber + 1}`,
         },
       );
 

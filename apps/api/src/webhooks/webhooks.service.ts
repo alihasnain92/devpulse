@@ -26,6 +26,7 @@ interface PrismaWebhookRecord {
   events: string[];
   isEnabled: boolean;
   encryptedSecret: string;
+  deletedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -51,8 +52,10 @@ export class WebhooksService {
     userId: string,
     dto: CreateWebhookDto,
   ): Promise<WebhookCreatedResponseDto> {
-    // Check maximum webhook endpoint capacity
-    const count = await this.prisma.webhookEndpoint.count({ where: { userId } });
+    // Check maximum active webhook endpoint capacity
+    const count = await this.prisma.webhookEndpoint.count({
+      where: { userId, deletedAt: null },
+    });
     if (count >= WEBHOOK_CONFIG.MAX_ENDPOINTS_PER_USER) {
       throw new BadRequestException(
         `Maximum limit of ${WEBHOOK_CONFIG.MAX_ENDPOINTS_PER_USER} webhook endpoints reached.`,
@@ -94,7 +97,7 @@ export class WebhooksService {
    */
   async findAll(userId: string): Promise<WebhookEndpointDto[]> {
     const records = await this.prisma.webhookEndpoint.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
@@ -109,7 +112,7 @@ export class WebhooksService {
    */
   async findOne(id: string, userId: string): Promise<WebhookEndpointDto> {
     const record = await this.prisma.webhookEndpoint.findFirst({
-      where: { id, userId },
+      where: { id, userId, deletedAt: null },
     });
 
     if (!record) {
@@ -128,7 +131,7 @@ export class WebhooksService {
     dto: UpdateWebhookDto,
   ): Promise<WebhookEndpointDto> {
     const existing = await this.prisma.webhookEndpoint.findFirst({
-      where: { id, userId },
+      where: { id, userId, deletedAt: null },
     });
 
     if (!existing) {
@@ -158,25 +161,30 @@ export class WebhooksService {
   }
 
   /**
-   * Deletes a webhook endpoint configuration, enforcing user ownership.
+   * Soft deletes a webhook endpoint configuration, enforcing user ownership.
+   * Soft deletion preserves all historical WebhookDelivery and WebhookAttempt logs.
    */
   async remove(
     id: string,
     userId: string,
   ): Promise<{ success: boolean; message: string }> {
     const existing = await this.prisma.webhookEndpoint.findFirst({
-      where: { id, userId },
+      where: { id, userId, deletedAt: null },
     });
 
     if (!existing) {
       throw new NotFoundException(`Webhook endpoint with ID '${id}' not found`);
     }
 
-    await this.prisma.webhookEndpoint.delete({
+    await this.prisma.webhookEndpoint.update({
       where: { id },
+      data: {
+        deletedAt: new Date(),
+        isEnabled: false,
+      },
     });
 
-    this.logger.log(`Deleted webhook endpoint ${id} for user ${userId}`);
+    this.logger.log(`Soft-deleted webhook endpoint ${id} for user ${userId}`);
 
     return {
       success: true,
@@ -226,6 +234,7 @@ export class WebhooksService {
       description: record.description ?? null,
       events: record.events as WebhookEventType[],
       isEnabled: record.isEnabled,
+      deletedAt: record.deletedAt ? record.deletedAt.toISOString() : null,
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),
     };

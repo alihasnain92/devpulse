@@ -2,6 +2,8 @@ import {
   ApiKeyScope,
   HttpMethod,
   WebhookAttemptStatus,
+  WebhookDeliveryOrigin,
+  WebhookDeliveryStatus,
   WebhookEventType,
 } from './constants';
 
@@ -153,6 +155,7 @@ export interface WebhookEndpointDto {
   description: string | null;
   events: WebhookEventType[];
   isEnabled: boolean;
+  deletedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -208,7 +211,11 @@ export interface WebhookDeliveryDto {
   id: string;
   eventId: string;
   endpointId: string;
-  status: string;
+  endpointName: string;
+  destinationUrl: string;
+  origin: WebhookDeliveryOrigin;
+  replayOfId: string | null;
+  status: WebhookDeliveryStatus;
   attemptCount: number;
   claimedAt: string | null;
   nextAttemptAt: string | null;
@@ -217,6 +224,52 @@ export interface WebhookDeliveryDto {
   lastErrorCode: string | null;
   createdAt: string;
   updatedAt: string;
+  eventType?: WebhookEventType;
+}
+
+export interface WebhookDeliveryCurrentEndpointDto {
+  id: string;
+  name: string;
+  url: string;
+  isEnabled: boolean;
+  isDeleted: boolean;
+}
+
+export interface WebhookDeliveryDetailDto extends WebhookDeliveryDto {
+  currentEndpoint: WebhookDeliveryCurrentEndpointDto | null;
+  event: {
+    id: string;
+    type: WebhookEventType;
+    sourceType: string;
+    sourceId: string;
+    payload: WebhookEventPayload;
+    createdAt: string;
+  };
+  latestAttempt?: WebhookAttemptDto | null;
+}
+
+export interface WebhookDeliveryFilterDto {
+  endpointId?: string;
+  status?: WebhookDeliveryStatus;
+  eventType?: WebhookEventType;
+  origin?: WebhookDeliveryOrigin;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface PaginatedWebhookDeliveriesDto {
+  items: WebhookDeliveryDto[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  total?: number;
+}
+
+export interface ReplayWebhookDeliveryResponseDto {
+  message: string;
+  originalDeliveryId: string;
+  replayDelivery: WebhookDeliveryDto;
+  delivery?: WebhookDeliveryDto;
+  isIdempotent?: boolean;
 }
 
 export interface WebhookAttemptDto {

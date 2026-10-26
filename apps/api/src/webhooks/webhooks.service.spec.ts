@@ -206,7 +206,7 @@ describe('WebhooksService (Unit)', () => {
       const result = await service.findAll(userId);
 
       expect(mockPrisma.webhookEndpoint.findMany).toHaveBeenCalledWith({
-        where: { userId },
+        where: { userId, deletedAt: null },
         orderBy: { createdAt: 'desc' },
         take: 100,
       });
@@ -299,15 +299,23 @@ describe('WebhooksService (Unit)', () => {
   });
 
   describe('remove', () => {
-    it('deletes endpoint when owned by user', async () => {
+    it('soft deletes endpoint when owned by user', async () => {
       mockPrisma.webhookEndpoint.findFirst.mockResolvedValue(mockEndpointRecord);
-      mockPrisma.webhookEndpoint.delete.mockResolvedValue(mockEndpointRecord);
+      mockPrisma.webhookEndpoint.update.mockResolvedValue({
+        ...mockEndpointRecord,
+        deletedAt: new Date(),
+        isEnabled: false,
+      });
 
       const result = await service.remove(endpointId, userId);
 
       expect(result.success).toBe(true);
-      expect(mockPrisma.webhookEndpoint.delete).toHaveBeenCalledWith({
+      expect(mockPrisma.webhookEndpoint.update).toHaveBeenCalledWith({
         where: { id: endpointId },
+        data: {
+          deletedAt: expect.any(Date),
+          isEnabled: false,
+        },
       });
     });
 

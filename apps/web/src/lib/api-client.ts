@@ -13,13 +13,18 @@ import {
   MessageResponseDto,
   MonitorDto,
   MonitorStatsDto,
+  PaginatedWebhookDeliveriesDto,
   RegisterRequestDto,
+  ReplayWebhookDeliveryResponseDto,
   SECURITY_CONFIG,
   StatsWindow,
   UpdateMonitorRequestDto,
   UpdateWebhookRequestDto,
   UserDto,
+  WebhookAttemptDto,
   WebhookCreatedResponseDto,
+  WebhookDeliveryDetailDto,
+  WebhookDeliveryFilterDto,
   WebhookEndpointDto,
 } from '@devpulse/shared';
 
@@ -263,6 +268,50 @@ export const apiClient = {
     return request<{ success: boolean; message: string }>(`/webhooks/${id}`, {
       method: 'DELETE',
     });
+  },
+
+  async getWebhookDeliveries(
+    params?: WebhookDeliveryFilterDto,
+  ): Promise<PaginatedWebhookDeliveriesDto> {
+    const query = new URLSearchParams();
+    if (params?.endpointId) query.set('endpointId', params.endpointId);
+    if (params?.status) query.set('status', params.status);
+    if (params?.eventType) query.set('eventType', params.eventType);
+    if (params?.origin) query.set('origin', params.origin);
+    if (params?.cursor) query.set('cursor', params.cursor);
+    if (params?.limit) query.set('limit', String(params.limit));
+    const qs = query.toString();
+    return request<PaginatedWebhookDeliveriesDto>(
+      `/webhooks/deliveries${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  async getWebhookDelivery(id: string): Promise<WebhookDeliveryDetailDto> {
+    return request<WebhookDeliveryDetailDto>(`/webhooks/deliveries/${id}`);
+  },
+
+  async getWebhookDeliveryAttempts(id: string): Promise<WebhookAttemptDto[]> {
+    return request<WebhookAttemptDto[]>(`/webhooks/deliveries/${id}/attempts`);
+  },
+
+  async replayWebhookDelivery(
+    id: string,
+    idempotencyKey?: string,
+  ): Promise<ReplayWebhookDeliveryResponseDto> {
+    const key =
+      idempotencyKey ||
+      (typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `replay-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
+    return request<ReplayWebhookDeliveryResponseDto>(
+      `/webhooks/deliveries/${id}/replay`,
+      {
+        method: 'POST',
+        headers: {
+          'Idempotency-Key': key,
+        },
+      },
+    );
   },
 
   async getApiKeys(): Promise<ApiKeyDto[]> {

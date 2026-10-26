@@ -422,7 +422,7 @@ describe('Webhooks Management API (Integration - Live PostgreSQL)', () => {
       expect(res.status).toBe(404);
     });
 
-    it('deletes endpoint for User A', async () => {
+    it('soft deletes endpoint for User A preserving records for history', async () => {
       const res = await request(app.getHttpServer())
         .delete(`/webhooks/${webhookAId}`)
         .set('Cookie', userACookie)
@@ -431,10 +431,124 @@ describe('Webhooks Management API (Integration - Live PostgreSQL)', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
 
+      // Verify soft-deleted in database
       const check = await prisma.webhookEndpoint.findUnique({
         where: { id: webhookAId },
       });
-      expect(check).toBeNull();
+      expect(check).not.toBeNull();
+      expect(check?.deletedAt).not.toBeNull();
+      expect(check?.isEnabled).toBe(false);
+
+      // Verify subsequent GET returns 404
+      const getRes = await request(app.getHttpServer())
+        .get(`/webhooks/${webhookAId}`)
+        .set('Cookie', userACookie);
+      expect(getRes.status).toBe(404);
+    });
+  });
+
+  describe('Webhook Endpoint Quota & Soft-Delete Lifecycle', () => {
+    it('enforces maximum 20 active endpoints limit, but allows new creation after soft-deleting an endpoint', async () => {
+      // 1. Check current active endpoints for User A
+      const initialActiveCount = await prisma.webhookEndpoint.count({
+        where: { userId: userAId, deletedAt: null },
+      });
+
+      // 2. Fill up User A's endpoints up to 20
+      const needed = 20 - initialActiveCount;
+      const createdEndpointIds: string[] = [];
+      for (let i = 0; i < needed; i++) {
+        const ep = await prisma.webhookEndpoint.create({
+          data: {
+            userId: userAId,
+            name: `Quota Endpoint ${i + 1}`,
+            url: `https://webhook.site/quota-${i + 1}`,
+            events: ['incident.created'],
+            encryptedSecret: 'dummy-secret',
+          },
+        });
+        createdEndpointIds.push(ep.id);
+      }
+
+      // Verify User A now has exactly 20 active endpoints
+      const countAtCap = await prisma.webhookEndpoint.count({
+        where: { userId: userAId, deletedAt: null },
+      });
+      expect(countAtCap).toBe(20);
+
+      // 3. Attempting to create the 21st endpoint must fail with 400 Bad Request
+      const overLimitRes = await request(app.getHttpServer())
+        .post('/webhooks')
+        .set('Cookie', userACookie)
+        .set(CSRF_HEADERS)
+        .send({
+          name: 'Over Capacity Endpoint',
+          url: 'https://webhook.site/over-capacity',
+          events: ['incident.created'],
+        });
+
+      expect(overLimitRes.status).toBe(400);
+      expect(overLimitRes.body.message).toContain('Maximum limit of 20 webhook endpoints reached');
+
+      // 4. Create an event and delivery on one of these endpoints to verify historical preservation
+      const targetEndpointId = createdEndpointIds[0];
+      const event = await prisma.webhookEvent.create({
+        data: {
+          userId: userAId,
+          type: 'incident.created',
+          sourceType: 'incident',
+          sourceId: `inc-quota-${Date.now()}`,
+          dedupeKey: `quota-event-${Date.now()}`,
+          payload: { test: true },
+        },
+      });
+      const delivery = await prisma.webhookDelivery.create({
+        data: {
+          eventId: event.id,
+          endpointId: targetEndpointId,
+          endpointName: 'Quota Endpoint 1',
+          destinationUrl: 'https://webhook.site/quota-1',
+          status: 'DELIVERED',
+          origin: 'AUTOMATIC',
+        },
+      });
+
+      // 5. Soft-delete the target endpoint via DELETE /webhooks/:id
+      const deleteRes = await request(app.getHttpServer())
+        .delete(`/webhooks/${targetEndpointId}`)
+        .set('Cookie', userACookie)
+        .set(CSRF_HEADERS);
+
+      expect(deleteRes.status).toBe(200);
+      expect(deleteRes.body.success).toBe(true);
+
+      // 6. Verify active count dropped to 19
+      const activeCountAfterDelete = await prisma.webhookEndpoint.count({
+        where: { userId: userAId, deletedAt: null },
+      });
+      expect(activeCountAfterDelete).toBe(19);
+
+      // 7. Creating a new endpoint now SUCCEEDS (quota slot opened up!)
+      const replacementRes = await request(app.getHttpServer())
+        .post('/webhooks')
+        .set('Cookie', userACookie)
+        .set(CSRF_HEADERS)
+        .send({
+          name: 'Replacement Endpoint Under Quota',
+          url: 'https://webhook.site/replacement-ok',
+          events: ['incident.created'],
+        });
+
+      expect(replacementRes.status).toBe(201);
+      expect(replacementRes.body.endpoint).toBeDefined();
+      expect(replacementRes.body.endpoint.name).toBe('Replacement Endpoint Under Quota');
+
+      // 8. Verify historical delivery for soft-deleted endpoint remains intact in database
+      const preservedDelivery = await prisma.webhookDelivery.findUnique({
+        where: { id: delivery.id },
+      });
+      expect(preservedDelivery).not.toBeNull();
+      expect(preservedDelivery?.endpointId).toBe(targetEndpointId);
     });
   });
 });

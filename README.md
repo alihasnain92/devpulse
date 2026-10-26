@@ -50,6 +50,7 @@ flowchart TD
     Frontend -->|"REST API with Cookies & CSRF"| API
     API -->|"Read / Write State"| Postgres
     API -->|"Dispatch Jobs & Sync"| Redis
+    API -->|"Manual Replay Dispatch"| Redis
     Scheduler -->|"Recurring Tick Schedules"| Redis
     MonitorWorker -->|"Consume Health Check Jobs"| Redis
     MonitorWorker -->|"1. Resolve DNS & Pin Socket"| SSRF
@@ -61,7 +62,7 @@ flowchart TD
     WebhookWorker -->|"Delivery-Time SSRF & HMAC Sign"| SSRF
     SSRF -->|"POST Payload (Strict No-Redirect)"| WebhookDest
     WebhookWorker -->|"Persist Delivery Attempt"| Postgres
-    API -->|"Aggregate Telemetry & Incidents"| Browser
+    API -->|"Aggregate Telemetry, Deliveries & Incidents"| Browser
 ```
 
 ---
@@ -179,6 +180,26 @@ Database connections are protected against exhaustion:
   - **Transient Failure Classification**: Server errors (HTTP 5xx), timeouts (408), rate limits (429), and network errors trigger automatic exponential backoff.
 - **Durable Attempt History**: Every dispatch attempt persists a `WebhookAttempt` row recording the attempt number, latency in milliseconds, HTTP status code, sanitized error details, and a capped 1 KB response preview (`responseBodyPreview`).
 - **Worker Health Diagnostics**: The REST API exposes `GET /health/worker`, reporting operational diagnostics for both `monitorWorker` (queue `monitor-checks`), `webhookWorker` (queue `webhook-deliveries`), and shared `redis` connectivity.
+
+### 9. Webhook Delivery History, Attempt Inspection & Manual Replay (Level 2, Phase 9)
+- **Immutable Historical Snapshots**: Every `WebhookDelivery` records an immutable snapshot of destination details (`endpointName`, `destinationUrl`) captured at dispatch time, ensuring delivery records remain accurate even if endpoint names, URLs, or secrets are subsequently modified.
+- **Soft-Deletion Endpoint Preservation**: Webhook endpoints support soft deletion (`deletedAt TIMESTAMP(3)`). Deleting an endpoint removes it from active event fanout without deleting associated historical delivery logs or attempt records (`ON DELETE RESTRICT` foreign key integrity).
+- **Deep Delivery & Attempt Inspection**:
+  - Full delivery detail inspection exposing snapshot routing compared to live endpoint state (highlighting deleted or disabled endpoints or updated URLs).
+  - Chronological attempt timeline with statuses (`STARTED`, `SUCCESS`, `FAILED`, `ABANDONED`), execution latency in milliseconds, HTTP response codes, classified error codes, and bounded response previews (1 KB max).
+  - Safe payload inspection with formatted JSON display and single-click clipboard copying (cryptographic secrets and internal IPs are never leaked).
+- **Lineage-Tracked Manual Replay**:
+  - Operators can manually trigger re-dispatch of historical webhook events via `POST /webhooks/deliveries/:id/replay`.
+  - Creates a new `WebhookDelivery` record with `origin: MANUAL_REPLAY`, referencing the parent delivery via `replayOfId`.
+  - Snapshots current live endpoint state, reuses exact original `WebhookEvent.payload`, re-validates delivery-time SSRF, generates fresh HMAC-SHA256 signature (`t=now`), preserves `X-DevPulse-Event-Id`, and assigns a new `X-DevPulse-Delivery-Id`.
+- **Replay Idempotency & Concurrency Safety**:
+  - Manual replays require an `Idempotency-Key` header with tenant-scoped deduplication (`replay:<userId>:<key>`). Duplicate requests safely return the already-enqueued delivery record without creating duplicate dispatch jobs.
+  - Automatic delivery uniqueness is enforced via a PostgreSQL partial unique index:
+    `CREATE UNIQUE INDEX "webhook_deliveries_automatic_unique" ON "webhook_deliveries"("eventId", "endpointId") WHERE ("origin" = 'AUTOMATIC');`
+    allowing unlimited intentional manual replays while preventing automatic fanout duplication.
+- **Receiver-Side Idempotency Best Practices**:
+  - Webhook delivery operates with **at-least-once** semantics across distributed systems and retries.
+  - Consumers must deduplicate incoming webhooks by recording the immutable `X-DevPulse-Event-Id` header rather than treating HTTP delivery as exactly-once.
 
 ---
 
@@ -304,7 +325,7 @@ All integration and smoke tests dynamically reroute database connections to `dev
 
 - [x] **Webhook Registration & Security (Phase 7)**: User-managed webhooks, AES-256-GCM secret encryption, versioned HMAC-SHA256 signatures, and scoped programmatic API keys.
 - [x] **Reliable Webhook Event Delivery Pipeline (Phase 8)**: Transactional outbox pattern, BullMQ delivery queue, socket-pinned delivery-time SSRF defenses, strict no-redirect policy, exponential backoff with jitter (up to 6 attempts), and durable attempt history.
-- [ ] **Webhook Replay, Delivery History UI & Dead-Letter Handling (Phase 9)**: Manual replay triggers, endpoint delivery logs in Settings UI, attempt inspector, and dead-letter queues.
+- [x] **Webhook Delivery History, Attempt Inspection & Manual Replay (Phase 9)**: Delivery history UI, attempt timeline inspection with response previews, endpoint soft deletion, and idempotent manual replay with lineage tracking.
 - [ ] **Multi-Channel Alerting**: Native integrations for Slack webhooks, Discord webhooks, PagerDuty, and email alerts via SendGrid/SES.
 - [ ] **Multi-Region Monitoring Probes**: Distributed worker nodes running in US-East, EU-Central, and AP-East to detect regional outages.
 - [ ] **Public Status Pages**: White-label public status dashboards with incident post-mortems and custom domains.

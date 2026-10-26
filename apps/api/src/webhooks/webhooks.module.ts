@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { WebhookDeliveriesController } from './deliveries/webhook-deliveries.controller';
+import { WebhookDeliveriesService } from './deliveries/webhook-deliveries.service';
 import { WebhooksController } from './webhooks.controller';
 import { WebhooksService } from './webhooks.service';
 import { WebhookCryptoService } from './crypto/webhook-crypto.service';
@@ -9,9 +11,13 @@ import { WebhookOutboxPublisherService } from './outbox/webhook-outbox-publisher
 import { WebhookDeliveryWorkerService } from './queue/webhook-delivery-worker.service';
 
 @Module({
-  controllers: [WebhooksController],
+  controllers: [
+    WebhookDeliveriesController,
+    WebhooksController,
+  ],
   providers: [
     WebhooksService,
+    WebhookDeliveriesService,
     WebhookCryptoService,
     WebhookSignerService,
     WebhookHttpClientService,
@@ -21,6 +27,7 @@ import { WebhookDeliveryWorkerService } from './queue/webhook-delivery-worker.se
   ],
   exports: [
     WebhooksService,
+    WebhookDeliveriesService,
     WebhookCryptoService,
     WebhookSignerService,
     WebhookHttpClientService,

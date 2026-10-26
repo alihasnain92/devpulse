@@ -8,7 +8,7 @@
     "start:dev": "nest start --watch",
     "start:worker": "node dist/apps/api/src/worker.js",
     "start:worker:dev": "nest start --entryFile apps/api/src/worker --watch",
-    "test": "jest",
+    "test": "jest --runInBand --forceExit",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit"
   },
