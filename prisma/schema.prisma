@@ -75,6 +75,7 @@ model CheckResult {
   isSuccess    Boolean
   errorMessage String?
   isSeeded     Boolean   @default(false)
+  jobId        String?   @unique
   checkedAt    DateTime  @default(now())
 
   monitor      Monitor   @relation(fields: [monitorId], references: [id], onDelete: Cascade)

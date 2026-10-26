@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HttpMethod, MonitorDto } from '@devpulse/shared';
 import { MonitorsController } from './monitors.controller';
 import { MonitorsService } from './monitors.service';
+import { MonitoringService } from '../monitoring/monitoring.service';
 import { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 
 describe('MonitorsController (Unit)', () => {
@@ -12,6 +13,11 @@ describe('MonitorsController (Unit)', () => {
     findOne: jest.Mock;
     update: jest.Mock;
     remove: jest.Mock;
+  };
+  let monitoringService: {
+    enqueueManualCheck: jest.Mock;
+    getRecentChecks: jest.Mock;
+    getLatestCheck: jest.Mock;
   };
 
   const mockUser: AuthenticatedUser = {
@@ -43,12 +49,22 @@ describe('MonitorsController (Unit)', () => {
       remove: jest.fn(),
     };
 
+    monitoringService = {
+      enqueueManualCheck: jest.fn(),
+      getRecentChecks: jest.fn(),
+      getLatestCheck: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [MonitorsController],
       providers: [
         {
           provide: MonitorsService,
           useValue: service,
+        },
+        {
+          provide: MonitoringService,
+          useValue: monitoringService,
         },
       ],
     }).compile();
@@ -59,10 +75,14 @@ describe('MonitorsController (Unit)', () => {
   it('create should call service.create with user ID and DTO', async () => {
     service.create.mockResolvedValue(mockMonitor);
 
-    const dto = { name: 'Main Website', url: 'https://example.com' };
+    const dto = {
+      name: 'Main Website',
+      url: 'https://example.com',
+    };
+
     const result = await controller.create(mockUser, dto);
 
-    expect(service.create).toHaveBeenCalledWith(mockUser.id, dto);
+    expect(service.create).toHaveBeenCalledWith('user-abc', dto);
     expect(result).toBe(mockMonitor);
   });
 
@@ -71,37 +91,105 @@ describe('MonitorsController (Unit)', () => {
 
     const result = await controller.findAll(mockUser);
 
-    expect(service.findAll).toHaveBeenCalledWith(mockUser.id);
+    expect(service.findAll).toHaveBeenCalledWith('user-abc');
     expect(result).toEqual([mockMonitor]);
   });
 
-  it('findOne should call service.findOne with id and user ID', async () => {
+  it('findOne should call service.findOne with monitor ID and user ID', async () => {
     service.findOne.mockResolvedValue(mockMonitor);
 
     const result = await controller.findOne(mockUser, 'mon-1');
 
-    expect(service.findOne).toHaveBeenCalledWith('mon-1', mockUser.id);
+    expect(service.findOne).toHaveBeenCalledWith('mon-1', 'user-abc');
     expect(result).toBe(mockMonitor);
   });
 
-  it('update should call service.update with id, user ID, and DTO', async () => {
-    const updated = { ...mockMonitor, isPaused: true };
+  it('update should call service.update with monitor ID, user ID, and update DTO', async () => {
+    const updated = { ...mockMonitor, name: 'Renamed' };
     service.update.mockResolvedValue(updated);
 
-    const result = await controller.update(mockUser, 'mon-1', { isPaused: true });
-
-    expect(service.update).toHaveBeenCalledWith('mon-1', mockUser.id, {
-      isPaused: true,
+    const result = await controller.update(mockUser, 'mon-1', {
+      name: 'Renamed',
     });
-    expect(result).toBe(updated);
+
+    expect(service.update).toHaveBeenCalledWith('mon-1', 'user-abc', {
+      name: 'Renamed',
+    });
+    expect(result.name).toBe('Renamed');
   });
 
-  it('remove should call service.remove with id and user ID', async () => {
-    service.remove.mockResolvedValue({ message: 'Monitor deleted successfully' });
+  it('remove should call service.remove with monitor ID and user ID', async () => {
+    service.remove.mockResolvedValue({
+      message: 'Monitor deleted successfully',
+    });
 
     const result = await controller.remove(mockUser, 'mon-1');
 
-    expect(service.remove).toHaveBeenCalledWith('mon-1', mockUser.id);
+    expect(service.remove).toHaveBeenCalledWith('mon-1', 'user-abc');
     expect(result).toEqual({ message: 'Monitor deleted successfully' });
+  });
+
+  it('triggerManualCheck should call monitoringService.enqueueManualCheck', async () => {
+    const mockResponse = {
+      message: 'Check queued successfully',
+      checkJobId: 'job-123',
+      statusUrl: '/monitors/mon-1/checks/latest',
+    };
+    monitoringService.enqueueManualCheck.mockResolvedValue(mockResponse);
+
+    const result = await controller.triggerManualCheck(mockUser, 'mon-1');
+
+    expect(monitoringService.enqueueManualCheck).toHaveBeenCalledWith(
+      'mon-1',
+      'user-abc',
+    );
+    expect(result).toBe(mockResponse);
+  });
+
+  it('getRecentChecks should call monitoringService.getRecentChecks with parsed limit', async () => {
+    const mockChecks = [
+      {
+        id: 'chk-1',
+        monitorId: 'mon-1',
+        statusCode: 200,
+        latencyMs: 145,
+        isSuccess: true,
+        errorMessage: null,
+        isSeeded: false,
+        checkedAt: '2026-10-26T12:00:00.000Z',
+      },
+    ];
+    monitoringService.getRecentChecks.mockResolvedValue(mockChecks);
+
+    const result = await controller.getRecentChecks(mockUser, 'mon-1', '25');
+
+    expect(monitoringService.getRecentChecks).toHaveBeenCalledWith(
+      'mon-1',
+      'user-abc',
+      25,
+    );
+    expect(result).toBe(mockChecks);
+  });
+
+  it('getLatestCheck should call monitoringService.getLatestCheck', async () => {
+    const mockCheck = {
+      id: 'chk-1',
+      monitorId: 'mon-1',
+      statusCode: 200,
+      latencyMs: 145,
+      isSuccess: true,
+      errorMessage: null,
+      isSeeded: false,
+      checkedAt: '2026-10-26T12:00:00.000Z',
+    };
+    monitoringService.getLatestCheck.mockResolvedValue(mockCheck);
+
+    const result = await controller.getLatestCheck(mockUser, 'mon-1');
+
+    expect(monitoringService.getLatestCheck).toHaveBeenCalledWith(
+      'mon-1',
+      'user-abc',
+    );
+    expect(result).toBe(mockCheck);
   });
 });

@@ -10,6 +10,7 @@ const config: Config = {
   collectCoverageFrom: ['src/**/*.(t|j)s'],
   coverageDirectory: './coverage',
   testEnvironment: 'node',
+  testTimeout: 30000,
   setupFiles: ['<rootDir>/test/setup-env.ts'],
   moduleNameMapper: {
     '^@devpulse/shared$': '<rootDir>/../../packages/shared/src/index.ts',

@@ -73,6 +73,7 @@ export interface CheckResultDto {
   isSuccess: boolean;
   errorMessage: string | null;
   isSeeded: boolean;
+  jobId?: string | null;
   checkedAt: string;
 }
 

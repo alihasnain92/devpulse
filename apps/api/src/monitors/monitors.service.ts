@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { HttpMethod, MONITOR_LIMITS, MonitorDto } from '@devpulse/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { SchedulerService } from '../monitoring/queue/scheduler.service';
 import { CreateMonitorDto } from './dto/create-monitor.dto';
 import { UpdateMonitorDto } from './dto/update-monitor.dto';
 
@@ -27,7 +28,10 @@ interface PrismaMonitorRecord {
 export class MonitorsService {
   private readonly logger = new Logger(MonitorsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly schedulerService: SchedulerService,
+  ) {}
 
   async create(userId: string, dto: CreateMonitorDto): Promise<MonitorDto> {
     const monitor = await this.prisma.monitor.create({
@@ -45,6 +49,22 @@ export class MonitorsService {
     });
 
     this.logger.log(`Created monitor ${monitor.id} for user ${userId}`);
+
+    // Register recurring BullMQ check schedule if monitor is not paused
+    if (!monitor.isPaused) {
+      try {
+        await this.schedulerService.scheduleMonitor({
+          id: monitor.id,
+          intervalSeconds: monitor.intervalSeconds,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `Failed to register BullMQ scheduler for new monitor ${monitor.id}: ${message}`,
+        );
+      }
+    }
+
     return this.formatMonitor(monitor as unknown as PrismaMonitorRecord);
   }
 
@@ -102,6 +122,29 @@ export class MonitorsService {
     });
 
     this.logger.log(`Updated monitor ${id} for user ${userId}`);
+
+    // Update BullMQ scheduler based on state changes
+    try {
+      if (updated.isPaused) {
+        // Paused: remove recurring schedule
+        await this.schedulerService.removeMonitorSchedule(updated.id);
+      } else if (
+        existing.isPaused ||
+        existing.intervalSeconds !== updated.intervalSeconds
+      ) {
+        // Resumed or interval changed: upsert schedule with new interval
+        await this.schedulerService.scheduleMonitor({
+          id: updated.id,
+          intervalSeconds: updated.intervalSeconds,
+        });
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Failed to update BullMQ scheduler for monitor ${updated.id}: ${message}`,
+      );
+    }
+
     return this.formatMonitor(updated as unknown as PrismaMonitorRecord);
   }
 
@@ -112,6 +155,16 @@ export class MonitorsService {
 
     if (!existing) {
       throw new NotFoundException(`Monitor with ID '${id}' not found`);
+    }
+
+    // Remove BullMQ scheduler
+    try {
+      await this.schedulerService.removeMonitorSchedule(existing.id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Failed to remove BullMQ scheduler for monitor ${existing.id}: ${message}`,
+      );
     }
 
     await this.prisma.monitor.delete({

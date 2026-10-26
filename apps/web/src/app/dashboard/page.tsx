@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { MonitorDto } from '@devpulse/shared';
+import { CheckResultDto, MonitorDto } from '@devpulse/shared';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { Navbar } from '@/components/navbar';
@@ -19,18 +19,19 @@ import {
   Activity,
   Plus,
   Radio,
-  PauseCircle,
   CheckCircle2,
   Clock,
   ArrowRight,
   ShieldCheck,
   AlertCircle,
-  ExternalLink,
 } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [monitors, setMonitors] = useState<MonitorDto[]>([]);
+  const [latestChecks, setLatestChecks] = useState<
+    Record<string, CheckResultDto | null>
+  >({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,6 +42,20 @@ export default function DashboardPage() {
         setError(null);
         const data = await apiClient.getMonitors();
         setMonitors(data);
+
+        // Fetch latest checks for the monitors
+        const checkResults = await Promise.all(
+          data.map(async (m) => {
+            const chk = await apiClient.getLatestCheck(m.id).catch(() => null);
+            return [m.id, chk] as const;
+          }),
+        );
+
+        const map: Record<string, CheckResultDto | null> = {};
+        for (const [id, chk] of checkResults) {
+          map[id] = chk;
+        }
+        setLatestChecks(map);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : 'Failed to load monitor data',
@@ -72,6 +87,23 @@ export default function DashboardPage() {
   const totalMonitors = monitors.length;
   const activeMonitors = monitors.filter((m) => !m.isPaused).length;
   const pausedMonitors = monitors.filter((m) => m.isPaused).length;
+
+  // Real telemetry metrics
+  let passingCount = 0;
+  let failingCount = 0;
+  let neverCheckedCount = 0;
+
+  for (const m of monitors) {
+    const chk = latestChecks[m.id];
+    if (!chk) {
+      neverCheckedCount++;
+    } else if (chk.isSuccess) {
+      passingCount++;
+    } else {
+      failingCount++;
+    }
+  }
+
   const recentMonitors = monitors.slice(0, 5);
 
   return (
@@ -104,18 +136,18 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Phase Boundary Notice: Honest State */}
-        <div className="rounded-xl border border-blue-500/20 bg-blue-950/20 p-4 sm:p-5 flex items-start gap-4">
-          <ShieldCheck className="h-6 w-6 text-blue-400 shrink-0 mt-0.5" />
+        {/* Phase 3 Boundary Banner */}
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/20 p-4 sm:p-5 flex items-start gap-4">
+          <ShieldCheck className="h-6 w-6 text-emerald-400 shrink-0 mt-0.5" />
           <div className="space-y-1 text-sm">
-            <div className="font-semibold text-blue-300 flex items-center gap-2">
-              <span>Phase 2 Active: Monitor Management & Dashboard Shell</span>
-              <Badge variant="outline" className="border-blue-400/30 text-blue-300 text-xs">
-                Real DB Records
+            <div className="font-semibold text-emerald-300 flex items-center gap-2">
+              <span>Phase 3 Active: SSRF-Safe Monitoring & Background Processing</span>
+              <Badge variant="outline" className="border-emerald-400/30 text-emerald-300 text-xs">
+                BullMQ + Redis Active
               </Badge>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Monitors are persisted in PostgreSQL with tenant isolation. Outbound HTTP ping execution, BullMQ distributed schedulers, and incident detection will be enabled in Phase 3. No synthetic or simulated health stats are displayed.
+              Outbound HTTP/HTTPS checks execute with connection pinning, redirect hop verification, 1MB limits, and multi-layer SSRF defense. Manual checks and recurring schedules run via BullMQ 6.
             </p>
           </div>
         </div>
@@ -129,7 +161,7 @@ export default function DashboardPage() {
         )}
 
         {/* Summary Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="border-slate-800 bg-slate-900/60 shadow-xs">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-slate-400">
@@ -139,33 +171,48 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-white">{totalMonitors}</div>
-              <p className="text-xs text-slate-400 mt-1">Configured in account</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {activeMonitors} active, {pausedMonitors} paused
+              </p>
             </CardContent>
           </Card>
 
           <Card className="border-slate-800 bg-slate-900/60 shadow-xs">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-slate-400">
-                Active Monitors
+                Passing Endpoints
               </CardTitle>
               <CheckCircle2 className="h-4 w-4 text-emerald-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-emerald-400">{activeMonitors}</div>
-              <p className="text-xs text-slate-400 mt-1">Ready for scheduled checks</p>
+              <div className="text-3xl font-bold text-emerald-400">{passingCount}</div>
+              <p className="text-xs text-slate-400 mt-1">Expected HTTP status verified</p>
             </CardContent>
           </Card>
 
           <Card className="border-slate-800 bg-slate-900/60 shadow-xs">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-slate-400">
-                Paused Monitors
+                Failing Endpoints
               </CardTitle>
-              <PauseCircle className="h-4 w-4 text-amber-400" />
+              <AlertCircle className="h-4 w-4 text-red-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-amber-400">{pausedMonitors}</div>
-              <p className="text-xs text-slate-400 mt-1">Checks temporarily disabled</p>
+              <div className="text-3xl font-bold text-red-400">{failingCount}</div>
+              <p className="text-xs text-slate-400 mt-1">Status mismatch or network error</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-800 bg-slate-900/60 shadow-xs">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-slate-400">
+                Awaiting Checks
+              </CardTitle>
+              <Clock className="h-4 w-4 text-slate-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-slate-300">{neverCheckedCount}</div>
+              <p className="text-xs text-slate-400 mt-1">Newly created or unexecuted</p>
             </CardContent>
           </Card>
         </div>
@@ -199,73 +246,78 @@ export default function DashboardPage() {
               <div>
                 <CardTitle className="text-lg text-white">Configured Monitors</CardTitle>
                 <CardDescription className="text-slate-400">
-                  Recent API targets registered in your account
+                  Latest status and telemetry across your monitored targets
                 </CardDescription>
               </div>
               <Link href="/monitors">
-                <Button variant="ghost" size="sm" className="gap-1.5 text-blue-400 hover:text-blue-300">
-                  <span>View All ({totalMonitors})</span>
+                <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-blue-400 hover:text-blue-300">
+                  <span>View All</span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
               </Link>
             </CardHeader>
             <CardContent>
               <div className="divide-y divide-slate-800/80">
-                {recentMonitors.map((monitor) => (
-                  <div
-                    key={monitor.id}
-                    className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-800/20 rounded-lg px-2 transition-colors"
-                  >
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-2.5">
-                        <Link
-                          href={`/monitors/${monitor.id}`}
-                          className="font-medium text-white hover:text-blue-400 transition-colors truncate"
-                        >
-                          {monitor.name}
-                        </Link>
-                        <Badge
-                          variant={monitor.isPaused ? 'warning' : 'success'}
-                          className="text-[10px] uppercase font-bold"
-                        >
-                          {monitor.isPaused ? 'Paused' : 'Active'}
-                        </Badge>
-                        <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-700">
-                          {monitor.method}
-                        </Badge>
-                      </div>
+                {recentMonitors.map((monitor) => {
+                  const check = latestChecks[monitor.id];
 
-                      <div className="flex items-center gap-4 text-xs text-slate-400">
-                        <span className="truncate max-w-xs sm:max-w-md flex items-center gap-1 font-mono text-[11px]">
-                          {monitor.url}
-                          <a
-                            href={monitor.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-slate-500 hover:text-slate-300 inline-flex"
+                  return (
+                    <div
+                      key={monitor.id}
+                      className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 first:pt-0 last:pb-0"
+                    >
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-2.5">
+                          <Link
+                            href={`/monitors/${monitor.id}`}
+                            className="font-medium text-white hover:text-blue-400 transition-colors truncate"
                           >
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </span>
-                        <span className="hidden sm:inline-flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {monitor.intervalSeconds}s interval
-                        </span>
+                            {monitor.name}
+                          </Link>
+                          <Badge
+                            variant={monitor.isPaused ? 'warning' : 'success'}
+                            className="text-[10px] uppercase font-bold"
+                          >
+                            {monitor.isPaused ? 'Paused' : 'Active'}
+                          </Badge>
+                          {check ? (
+                            <Badge
+                              variant={check.isSuccess ? 'success' : 'destructive'}
+                              className="text-[10px] font-bold font-mono"
+                            >
+                              {check.isSuccess
+                                ? `${check.statusCode} OK • ${check.latencyMs}ms`
+                                : `FAIL • ${check.statusCode ?? 'ERR'}`}
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] text-slate-400 border-slate-700"
+                            >
+                              Never Checked
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-3 text-xs text-slate-400">
+                          <span className="font-mono text-slate-300 truncate max-w-xs sm:max-w-md">
+                            {monitor.url}
+                          </span>
+                          <span>•</span>
+                          <span>{monitor.intervalSeconds}s interval</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                        <Link href={`/monitors/${monitor.id}`}>
+                          <Button variant="outline" size="sm" className="text-xs h-8 border-slate-700">
+                            Details
+                          </Button>
+                        </Link>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-3 shrink-0">
-                      <Badge variant="outline" className="text-slate-400 border-slate-800 bg-slate-900/60 text-xs">
-                        Checks Pending (Phase 3)
-                      </Badge>
-                      <Link href={`/monitors/${monitor.id}`}>
-                        <Button variant="outline" size="sm" className="h-8 text-xs border-slate-700">
-                          Details
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

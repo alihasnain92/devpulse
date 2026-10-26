@@ -1,6 +1,8 @@
 import {
   AuthResponseDto,
+  CheckResultDto,
   CreateMonitorRequestDto,
+  ImmediateCheckResponse,
   LoginRequestDto,
   MessageResponseDto,
   MonitorDto,
@@ -154,5 +156,20 @@ export const apiClient = {
     return request<MessageResponseDto>(`/monitors/${id}`, {
       method: 'DELETE',
     });
+  },
+
+  async triggerCheck(id: string): Promise<ImmediateCheckResponse> {
+    return request<ImmediateCheckResponse>(`/monitors/${id}/check`, {
+      method: 'POST',
+    });
+  },
+
+  async getLatestCheck(id: string): Promise<CheckResultDto | null> {
+    return request<CheckResultDto | null>(`/monitors/${id}/checks/latest`);
+  },
+
+  async getChecks(id: string, limit?: number): Promise<CheckResultDto[]> {
+    const query = limit ? `?limit=${limit}` : '';
+    return request<CheckResultDto[]>(`/monitors/${id}/checks${query}`);
   },
 };
