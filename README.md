@@ -19,42 +19,42 @@ DevPulse decouples the web application, REST API, and asynchronous monitoring en
 
 ```mermaid
 flowchart TD
-    subgraph Client Layer
+    subgraph client_layer [Client Layer]
         Browser["Modern Browser (React 19 / Next.js 16)"]
     end
 
-    subgraph Edge & Ingress
-        Frontend["Next.js Web App\n(Port 3000 / App Router)"]
-        API["NestJS 11 REST API\n(Port 4000)"]
+    subgraph edge_ingress [Edge and Ingress]
+        Frontend["Next.js Web App<br/>(Port 3000 / App Router)"]
+        API["NestJS 11 REST API<br/>(Port 4000)"]
     end
 
-    subgraph Data & Queue Tier
-        Redis["Redis 7\n(Port 6379 / BullMQ 6)"]
-        Postgres[("PostgreSQL 16\n(Port 5433 / Prisma 7)")]
+    subgraph data_queue [Data and Queue Tier]
+        Redis["Redis 7<br/>(Port 6379 / BullMQ 6)"]
+        Postgres[("PostgreSQL 16<br/>(Port 5433 / Prisma 7)")]
     end
 
-    subgraph Async Monitoring Engine
-        Scheduler["Scheduler Service\n(BullMQ JobScheduler)"]
-        Worker["Standalone Worker Process\n(apps/api/src/worker.ts)"]
-        SSRF["SSRF-Hardened HTTP Client\n(Socket Pinning + CIDR Filter)"]
+    subgraph monitoring_engine [Async Monitoring Engine]
+        Scheduler["Scheduler Service<br/>(BullMQ JobScheduler)"]
+        Worker["Standalone Worker Process<br/>(apps/api/src/worker.ts)"]
+        SSRF["SSRF-Hardened HTTP Client<br/>(Socket Pinning + CIDR Filter)"]
     end
 
-    subgraph Target Infrastructure
+    subgraph target_infra [Target Infrastructure]
         TargetA["External Target API (200 OK)"]
         TargetB["Degraded Target API (500 Error)"]
     end
 
-    Browser -->|HTTPS / UI Requests| Frontend
-    Frontend -->|REST API with Cookies & CSRF| API
-    API -->|Read / Write State| Postgres
-    API -->|Dispatch Jobs & Sync| Redis
-    Scheduler -->|Recurring Tick Schedules| Redis
-    Worker -->|Consume Health Check Jobs| Redis
-    Worker -->|1. Resolve DNS & Pin Socket| SSRF
-    SSRF -->|2. Outbound Probe (Outside DB Tx)| TargetA
-    SSRF -->|2. Outbound Probe (Outside DB Tx)| TargetB
-    Worker -->|3. Persist Check & Eval Incident (Short Tx)| Postgres
-    API -->|Aggregate Telemetry & Incidents| Browser
+    Browser -->|"HTTPS / UI Requests"| Frontend
+    Frontend -->|"REST API with Cookies & CSRF"| API
+    API -->|"Read / Write State"| Postgres
+    API -->|"Dispatch Jobs & Sync"| Redis
+    Scheduler -->|"Recurring Tick Schedules"| Redis
+    Worker -->|"Consume Health Check Jobs"| Redis
+    Worker -->|"1. Resolve DNS & Pin Socket"| SSRF
+    SSRF -->|"2. Outbound Probe (Outside DB Tx)"| TargetA
+    SSRF -->|"2. Outbound Probe (Outside DB Tx)"| TargetB
+    Worker -->|"3. Persist Check & Eval Incident (Short Tx)"| Postgres
+    API -->|"Aggregate Telemetry & Incidents"| Browser
 ```
 
 ---
