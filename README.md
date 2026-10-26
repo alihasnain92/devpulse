@@ -1,108 +1,250 @@
-# DevPulse
+# DevPulse — High-Precision API Uptime Monitoring & Incident Management Platform
 
-DevPulse is a portfolio-quality full-stack SaaS platform for high-precision API uptime monitoring and incident management.
+[![CI](https://github.com/devpulse/devpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/devpulse/devpulse/actions/workflows/ci.yml)
+[![Node.js](https://img.shields.io/badge/node.js-%3E%3D22.0.0-green.svg)](https://nodejs.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-%3E%3D10.0.0-orange.svg)](https://pnpm.io/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-7-red.svg)](https://redis.io/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org/)
+[![NestJS](https://img.shields.io/badge/NestJS-11-red.svg)](https://nestjs.com/)
+[![Prisma](https://img.shields.io/badge/Prisma-7-2D3748.svg)](https://www.prisma.io/)
 
-## Architecture
+**DevPulse** is an enterprise-grade full-stack SaaS platform engineered for continuous API uptime monitoring, real-time telemetry analysis, and automated incident lifecycle management. Built with a modern TypeScript monorepo architecture, DevPulse demonstrates resilient backend design, robust security practices (including defense-in-depth SSRF mitigation), and reactive dashboard visualization.
 
-DevPulse is structured as an enterprise-grade monorepo managed with **pnpm workspaces**:
+---
+
+## Architecture Overview
+
+DevPulse decouples the web application, REST API, and asynchronous monitoring engine to guarantee high throughput, fault tolerance, and zero connection exhaustion.
+
+```mermaid
+flowchart TD
+    subgraph Client Layer
+        Browser["Modern Browser (React 19 / Next.js 16)"]
+    end
+
+    subgraph Edge & Ingress
+        Frontend["Next.js Web App\n(Port 3000 / App Router)"]
+        API["NestJS 11 REST API\n(Port 4000)"]
+    end
+
+    subgraph Data & Queue Tier
+        Redis["Redis 7\n(Port 6379 / BullMQ 6)"]
+        Postgres[("PostgreSQL 16\n(Port 5433 / Prisma 7)")]
+    end
+
+    subgraph Async Monitoring Engine
+        Scheduler["Scheduler Service\n(BullMQ JobScheduler)"]
+        Worker["Standalone Worker Process\n(apps/api/src/worker.ts)"]
+        SSRF["SSRF-Hardened HTTP Client\n(Socket Pinning + CIDR Filter)"]
+    end
+
+    subgraph Target Infrastructure
+        TargetA["External Target API (200 OK)"]
+        TargetB["Degraded Target API (500 Error)"]
+    end
+
+    Browser -->|HTTPS / UI Requests| Frontend
+    Frontend -->|REST API with Cookies & CSRF| API
+    API -->|Read / Write State| Postgres
+    API -->|Dispatch Jobs & Sync| Redis
+    Scheduler -->|Recurring Tick Schedules| Redis
+    Worker -->|Consume Health Check Jobs| Redis
+    Worker -->|1. Resolve DNS & Pin Socket| SSRF
+    SSRF -->|2. Outbound Probe (Outside DB Tx)| TargetA
+    SSRF -->|2. Outbound Probe (Outside DB Tx)| TargetB
+    Worker -->|3. Persist Check & Eval Incident (Short Tx)| Postgres
+    API -->|Aggregate Telemetry & Incidents| Browser
+```
+
+---
+
+## Monorepo Layout
+
+DevPulse is organized as a high-performance **pnpm workspace**:
 
 ```
 devpulse/
 ├── apps/
-│   ├── web/               # Next.js 16 App Router (React 19, Tailwind CSS 4, shadcn/ui)
-│   └── api/               # NestJS 11 REST API & Standalone Worker Process
+│   ├── web/                    # Next.js 16 App Router (React 19, Tailwind CSS 4, shadcn/ui, Recharts)
+│   └── api/                    # NestJS 11 REST API & Standalone BullMQ Worker
 ├── packages/
-│   └── shared/            # Shared TypeScript contracts, DTO interfaces, and constants
-├── prisma/                # Prisma 7 schema, migrations, and generated client
-├── prisma.config.ts       # Prisma 7 CLI configuration & migration datasource
-├── docker-compose.yml     # PostgreSQL 16 & Redis 7 container orchestration
-└── pnpm-workspace.yaml
+│   └── shared/                 # Shared TypeScript DTOs, API contracts, enums, and validation constants
+├── prisma/
+│   ├── migrations/             # Timestamped, version-controlled PostgreSQL migrations
+│   ├── schema.prisma           # Prisma 7 database schema definitions
+│   └── seed.ts                 # Safe, idempotent demonstration data seeder
+├── .github/
+│   └── workflows/
+│       └── ci.yml              # GitHub Actions CI (linting, tests, build, seed validation)
+├── docker-compose.yml          # Containerized PostgreSQL 16 and Redis 7 orchestration
+├── prisma.config.ts            # Prisma 7 CLI configuration & migration runner
+├── pnpm-workspace.yaml         # Workspace package declarations
+└── package.json                # Root orchestration scripts and dev toolchain
 ```
+
+---
 
 ## Technology Stack
 
-- **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS 4, shadcn/ui primitives.
-- **Backend**: NestJS 11 REST API with TypeScript strict mode.
-- **Background Worker**: Dedicated standalone BullMQ worker process (`apps/api/src/worker.ts`).
-- **Database & ORM**: PostgreSQL 16 with Prisma 7 (`provider = "prisma-client"`, `@prisma/adapter-pg` driver adapter).
-- **Task Queue**: Redis 7 and BullMQ v6 using `JobScheduler` APIs.
-- **Security**: Hardened SSRF defense (socket IP pinning, strict CIDR parsing), HttpOnly cookies, refresh token rotation with reuse detection.
+| Layer | Technologies |
+|---|---|
+| **Frontend** | [Next.js 16](https://nextjs.org/) (App Router), [React 19](https://react.dev/), [Tailwind CSS 4](https://tailwindcss.com/), [shadcn/ui](https://ui.shadcn.com/), [Recharts](https://recharts.org/), [Lucide React](https://lucide.dev/) |
+| **Backend API** | [NestJS 11](https://nestjs.com/), [Express](https://expressjs.com/), [TypeScript 5](https://www.typescriptlang.org/), [class-validator](https://github.com/typestack/class-validator) |
+| **Asynchronous Engine**| [BullMQ 6](https://bullmq.io/), [Redis 7](https://redis.io/) (Dedicated Worker process isolated from API process) |
+| **Persistence & ORM** | [PostgreSQL 16](https://www.postgresql.org/), [Prisma 7](https://www.prisma.io/) with `@prisma/adapter-pg` driver adapter |
+| **Authentication** | Dual-token JWT (Access in 15m HttpOnly cookie, Refresh in 7d HttpOnly cookie), Cryptographic Token Rotation, Family Revocation |
+| **Security Controls** | Multi-tier SSRF guard with socket-level IP pinning, RFC 1918 & Cloud Metadata CIDR blocklist, custom CSRF header validation |
 
-## Prerequisites
+---
 
-- [Node.js](https://nodejs.org/) (v22+ or v24+)
-- [pnpm](https://pnpm.io/) (v10+ or v12+)
-- [Docker](https://www.docker.com/) and Docker Compose
+## Key Features & Production Engineering
 
-## Quick Start (Local Development)
+### 1. Hardened SSRF Defense & Socket Pinning
+Outbound health-check requests are executed via a custom `MonitoringHttpClientService` that prevents Server-Side Request Forgery (SSRF) and DNS rebinding attacks:
+- **Pre-Resolution Validation**: Hostnames are resolved via Node DNS before connection. Private, loopback, link-local, multicast, and cloud metadata addresses (`169.254.169.254`, `127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `::1`) are immediately blocked.
+- **Socket-Level Connection Pinning**: Custom agent creates direct TCP sockets pinned strictly to the validated IP address, neutralizing Time-of-Check to Time-of-Use (TOCTOU) DNS rebinding vulnerabilities.
+- **Resource Constraints**: Maximum response body size cap (100 KB) and strict connection timeouts (1–30s) prevent memory exhaustion or worker hanging.
+- **Strict Redirect Control**: Redirect chains are re-validated through the entire SSRF filter pipeline.
 
-### 1. Clone & Install Dependencies
+### 2. Transaction Boundaries & Non-Blocking Probes
+Database connections are protected against exhaustion:
+- **Zero Network Locks**: Outbound HTTP checks execute entirely outside PostgreSQL transactions. The database connection is never held open while waiting on third-party API response latency.
+- **Micro-Transactions**: Persistence of `CheckResult` and evaluation of incident states execute in brief, atomic transactions with explicit row locking (`SELECT ... FOR UPDATE`) solely during database state mutation.
+- **Timestamp Ordering Enforcement**: Probes record `checkedAt` before the HTTP request begins, ensuring slow checks cannot resolve incidents created after probe dispatch.
 
+### 3. Automated Incident State Machine
+- **Consecutive Failure Threshold**: An incident is automatically triggered only after **3 consecutive failed checks**, eliminating transient noise and false positives.
+- **Immediate Recovery**: The very first successful health check automatically transitions an active incident to `resolved` and stamps `resolvedAt`.
+- **Database-Level Deduping**: A PostgreSQL partial unique index `(monitor_id) WHERE is_resolved = false` guarantees that concurrent worker jobs can never create duplicate active incidents for the same monitor.
+- **Credential Redaction**: Outbound probe failure logs sanitize tokens, JWTs, credentials, and cookies before persistence.
+
+### 4. Metrics & Statistical Telemetry
+- **Flexible Time Windows**: Computes aggregated statistics across **24 Hours**, **7 Days**, and **30 Days**.
+- **Percentile Latency**: Calculates p50, p95, and p99 response times using nearest-rank statistical formulas across successful health probes.
+- **Time-Series Aggregation**: Bins telemetry into hourly buckets (24h) and daily buckets (7d/30d) for interactive Recharts visualizations.
+
+### 5. Demo Data Policy & Strict Telemetry Boundary
+- **Isolated Synthetic Telemetry**: Includes a deterministic seeder (`pnpm db:seed`) generating 4 realistic monitors, 1,776 historical checks, and 2 resolved incidents under a dedicated demo account.
+- **Clean Telemetry Separation**: Synthetic records marked `isSeeded: true` are strictly isolated to the showcase user (`demo@devpulse.dev`). Real user accounts calculate metrics exclusively from authentic outbound probes, preventing synthetic contamination even under manual query manipulation.
+
+---
+
+## Showcase Quick Start
+
+### 1. Prerequisites
+Ensure you have the following installed on your machine:
+- [Node.js](https://nodejs.org/) (v22.x or v24.x)
+- [pnpm](https://pnpm.io/) (v10.x or v12.x)
+- [Docker](https://www.docker.com/) & Docker Compose
+
+### 2. Clone & Install
 ```bash
-git clone <repo-url> devpulse
+git clone https://github.com/devpulse/devpulse.git
 cd devpulse
 pnpm install
 ```
 
-### 2. Configure Environment
-
-Copy the example environment file:
-
+### 3. Configure Environment Variables
+Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
+*(On Windows PowerShell: `Copy-Item .env.example .env`)*
 
-### 3. Start Infrastructure Services
-
-Start PostgreSQL 16 and Redis 7 using Docker Compose:
-
+### 4. Start Infrastructure Containers
+Start PostgreSQL 16 (port 5433) and Redis 7 (port 6379):
 ```bash
 pnpm dev:services
 ```
 
-### 4. Apply Database Migrations & Generate Prisma Client
-
+### 5. Apply Database Migrations & Seed Demo Data
 ```bash
 pnpm db:migrate
+pnpm db:seed
 ```
 
-### 5. Start the Application
-
-Start all services (Web, API, and Worker) concurrently:
-
+### 6. Start the DevPulse Application
+Start the Web App, REST API, and Background Worker concurrently:
 ```bash
 pnpm dev
 ```
 
-Or run individual services:
+### 7. Access DevPulse
+- **Web Dashboard**: [http://localhost:3000](http://localhost:3000)
+- **REST API & Health**: [http://localhost:4000/health](http://localhost:4000/health)
 
-- **Frontend**: `pnpm dev:web` (runs on [http://localhost:3000](http://localhost:3000))
-- **API Server**: `pnpm dev:api` (runs on [http://localhost:4000](http://localhost:4000))
-- **Background Worker**: `pnpm dev:worker` (runs standalone Node context)
+#### Showcase Demo Credentials
+Click the **"Fill Demo Credentials"** button on the login screen or enter:
+- **Email**: `demo@devpulse.dev`
+- **Password**: `Password123!`
 
-## Project Scripts
+---
 
-| Script | Purpose |
-|--------|---------|
-| `pnpm dev` | Runs Web, API, and Worker concurrently |
-| `pnpm dev:web` | Starts Next.js 16 dev server |
-| `pnpm dev:api` | Starts NestJS API in watch mode |
-| `pnpm dev:worker` | Starts background worker in watch mode |
-| `pnpm dev:services` | Starts PostgreSQL and Redis containers |
-| `pnpm dev:services:down` | Stops infrastructure containers |
-| `pnpm db:migrate` | Applies Prisma 7 migrations |
-| `pnpm db:seed` | Seeds isolated demonstration data |
-| `pnpm build` | Builds all packages and applications |
-| `pnpm test` | Runs automated test suites across workspaces |
+## Monorepo Command Reference
 
-## Level 1 Scope
+| Command | Description |
+|---|---|
+| `pnpm dev` | Starts Next.js (3000), NestJS API (4000), and Worker concurrently |
+| `pnpm dev:web` | Starts Next.js 16 frontend in development mode |
+| `pnpm dev:api` | Starts NestJS 11 API server in watch mode |
+| `pnpm dev:worker` | Starts the standalone BullMQ monitoring worker process |
+| `pnpm dev:services` | Starts PostgreSQL 16 and Redis 7 via Docker Compose |
+| `pnpm dev:services:down` | Gracefully terminates Docker containers |
+| `pnpm db:generate` | Generates the Prisma 7 client |
+| `pnpm db:migrate` | Runs Prisma migrations in development |
+| `pnpm db:seed` | Seeds idempotent demo monitors, telemetry, and incidents |
+| `pnpm db:studio` | Launches Prisma Studio GUI for database inspection |
+| `pnpm build` | Builds all packages and applications for production |
+| `pnpm test` | Runs the full Jest test suite across the monorepo |
+| `pnpm lint` | Runs ESLint across all workspaces |
 
-- User authentication with refresh session rotation and token revocation.
-- Dashboard with live database-driven statistics.
-- Create, view, edit, pause, resume, and delete API health monitors (GET & HEAD).
-- Scheduled background health checks with BullMQ job schedulers.
-- Multi-layer SSRF protection with socket-level IP validation.
-- Append-only check results recording latency and status codes.
-- Automated incident detection (3 consecutive failures) and recovery.
-- Historical uptime and latency charts.
-- Distinguishable demo data and isolated demo user account.
+---
+
+## Testing & Quality Assurance
+
+DevPulse includes an automated test suite spanning unit tests, integration tests against isolated PostgreSQL test databases, and end-to-end smoke verification:
+
+```bash
+# Run all unit and integration tests across all packages
+pnpm test
+
+# Run API test suites specifically
+pnpm --filter @devpulse/api test
+
+# Run metrics integration tests against isolated PostgreSQL (devpulse_test)
+pnpm --filter @devpulse/api test src/metrics/metrics.integration.spec.ts
+```
+
+### Database Isolation Strategy
+All integration and smoke tests dynamically reroute database connections to `devpulse_test` and Redis queue jobs to DB `1`. The development database (`devpulse`) and live demo data are strictly untouched during testing runs.
+
+---
+
+## Security Model
+
+1. **Authentication & Session Security**:
+   - Short-lived Access Tokens (15m) and long-lived Refresh Tokens (7d) transmitted in `HttpOnly`, `SameSite=Lax` cookies.
+   - Cryptographic refresh token rotation: each refresh token can only be used once. Attempted reuse immediately revokes the entire token family.
+   - Per-user tenant isolation: all database queries verify `userId` ownership at the query level.
+2. **SSRF Mitigation**:
+   - Strict IP classification preventing internal loopback, private RFC1918 subnets, and cloud metadata access.
+   - Pinned socket connections neutralizing DNS rebinding attacks.
+3. **Resilience & Rate Limiting**:
+   - Outbound probe timeouts (1-30s) and max response payload limits (100KB).
+   - Structured error handling with zero internal stack trace exposure.
+
+---
+
+## Level 2 Roadmap & Future Enhancements
+
+- [ ] **Multi-Channel Alerting**: Native integrations for Slack webhooks, Discord webhooks, PagerDuty, and email alerts via SendGrid/SES.
+- [ ] **Multi-Region Monitoring Probes**: Distributed worker nodes running in US-East, EU-Central, and AP-East to detect regional outages.
+- [ ] **Public Status Pages**: White-label public status dashboards with incident post-mortems and custom domains.
+- [ ] **Configurable Incident Thresholds**: Custom failure streak rules, degraded latency thresholds, and SSL certificate expiration warnings.
+
+---
+
+## License
+
+MIT © [DevPulse Contributors](LICENSE)

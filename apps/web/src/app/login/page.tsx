@@ -137,6 +137,28 @@ export default function LoginPage() {
               )}
             </Button>
 
+            {/* Showcase Demo Credentials Helper */}
+            <div className="w-full rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs space-y-1.5 text-left">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-300">
+                  Showcase Demo Account
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('demo@devpulse.dev');
+                    setPassword('Password123!');
+                  }}
+                  className="text-blue-400 hover:text-blue-300 font-medium underline text-[11px]"
+                >
+                  Auto-fill demo
+                </button>
+              </div>
+              <div className="text-slate-500 font-mono text-[11px]">
+                demo@devpulse.dev • Password123!
+              </div>
+            </div>
+
             <p className="text-center text-sm text-slate-400">
               Don&apos;t have an account?{' '}
               <Link

@@ -63,6 +63,7 @@ export class IncidentsService {
       statusCode: number | null;
       errorMessage: string | null;
       checkedAt: Date;
+      isSeeded?: boolean;
     },
     expectedStatus = 200,
   ): Promise<IncidentDto | null> {
@@ -152,6 +153,7 @@ export class IncidentsService {
             isResolved: false,
             resolvedAt: null,
             cause: sanitizedCause,
+            isSeeded: checkResult.isSeeded ?? false,
           },
         });
 

@@ -2,6 +2,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
+import * as bcrypt from 'bcrypt';
 import { AUTH_COOKIES, SECURITY_CONFIG } from '@devpulse/shared';
 import { AppModule } from '../app.module';
 import { PrismaService } from '../prisma/prisma.service';
@@ -234,6 +235,7 @@ describe('Metrics & Analytics API (Integration - Live PostgreSQL)', () => {
       expect(res.status).toBe(200);
       expect(res.body.monitorId).toBe(monitorAId);
       expect(res.body.window).toBe('24h');
+      expect(res.body.isDemo).toBe(false);
       // 5 live checks: 4 successful, 1 failed (seeded check excluded!)
       expect(res.body.totalChecks).toBe(5);
       expect(res.body.successfulChecks).toBe(4);
@@ -301,6 +303,7 @@ describe('Metrics & Analytics API (Integration - Live PostgreSQL)', () => {
       expect(res.body.neverCheckedEndpoints).toBe(0);
       expect(res.body.activeIncidents).toBe(0);
       expect(res.body.systemUptime24h).toBeNull();
+      expect(res.body.isDemo).toBe(false);
     });
 
     it('returns accurate aggregated summary for User A', async () => {
@@ -312,6 +315,7 @@ describe('Metrics & Analytics API (Integration - Live PostgreSQL)', () => {
       expect(res.body.totalMonitors).toBe(2);
       expect(res.body.pausedMonitors).toBe(2);
       expect(res.body.activeMonitors).toBe(0);
+      expect(res.body.isDemo).toBe(false);
 
       // monitorA latest live check was 500 (failing)
       // emptyMonitor has no checks (neverChecked)
@@ -322,6 +326,132 @@ describe('Metrics & Analytics API (Integration - Live PostgreSQL)', () => {
 
       // System uptime 24h across User A monitors: 4 / 5 = 80.0%
       expect(res.body.systemUptime24h).toBe(80);
+    });
+  });
+
+  describe('Demo Mode Policy & Boundary (DEMO_CONFIG.DEMO_USER_EMAIL)', () => {
+    let demoCookie: string;
+    let demoMonitorId: string;
+
+    beforeAll(async () => {
+      // Find or create demo user with known valid hash
+      const demoEmail = 'demo@devpulse.dev';
+      const hashedPassword = await bcrypt.hash('Password123!', 10);
+      let demoUser = await prisma.user.findUnique({
+        where: { email: demoEmail },
+      });
+
+      if (!demoUser) {
+        demoUser = await prisma.user.create({
+          data: {
+            email: demoEmail,
+            name: 'Demo Account',
+            hashedPassword,
+          },
+        });
+      } else {
+        await prisma.user.update({
+          where: { id: demoUser.id },
+          data: { hashedPassword },
+        });
+      }
+
+      // Create a seeded monitor for demo user
+      const demoMon = await prisma.monitor.create({
+        data: {
+          userId: demoUser.id,
+          name: 'Demo Synthetic Monitor',
+          url: 'https://example.com/demo',
+          isPaused: true,
+          isSeeded: true,
+        },
+      });
+      demoMonitorId = demoMon.id;
+
+      // Seed 2 checks for this demo monitor
+      await prisma.checkResult.createMany({
+        data: [
+          {
+            monitorId: demoMonitorId,
+            statusCode: 200,
+            latencyMs: 50,
+            isSuccess: true,
+            isSeeded: true,
+            checkedAt: new Date(Date.now() - 30 * 60 * 1000),
+          },
+          {
+            monitorId: demoMonitorId,
+            statusCode: 200,
+            latencyMs: 70,
+            isSuccess: true,
+            isSeeded: true,
+            checkedAt: new Date(Date.now() - 15 * 60 * 1000),
+          },
+        ],
+      });
+
+      // Login as demo user to obtain session cookie
+      const sessionRes = await request(app.getHttpServer())
+        .post('/auth/login')
+        .set(CSRF_HEADERS)
+        .send({
+          email: demoEmail,
+          password: 'Password123!',
+        });
+
+      expect(sessionRes.status).toBe(200);
+      const cookies = sessionRes.headers['set-cookie'];
+      const accessCookie = cookies.find((c: string) =>
+        c.startsWith(`${AUTH_COOKIES.ACCESS_TOKEN}=`),
+      );
+      demoCookie = accessCookie.split(';')[0];
+    });
+
+    afterAll(async () => {
+      try {
+        if (demoMonitorId) {
+          await prisma.checkResult.deleteMany({
+            where: { monitorId: demoMonitorId },
+          });
+          await prisma.monitor.delete({
+            where: { id: demoMonitorId },
+          });
+        }
+      } catch {
+        // Ignore cleanup error
+      }
+    });
+
+    it('returns isDemo: true and aggregates seeded telemetry for demo user', async () => {
+      expect(demoCookie).toBeDefined();
+
+      const res = await request(app.getHttpServer())
+        .get(`/monitors/${demoMonitorId}/stats?window=24h`)
+        .set('Cookie', demoCookie);
+
+      expect(res.status).toBe(200);
+      expect(res.body.isDemo).toBe(true);
+      expect(res.body.totalChecks).toBeGreaterThanOrEqual(2);
+      expect(res.body.uptimePercent).toBe(100);
+    });
+
+    it('returns isDemo: true on dashboard summary for demo user', async () => {
+      expect(demoCookie).toBeDefined();
+
+      const res = await request(app.getHttpServer())
+        .get('/monitors/dashboard/summary')
+        .set('Cookie', demoCookie);
+
+      expect(res.status).toBe(200);
+      expect(res.body.isDemo).toBe(true);
+    });
+
+    it('blocks User A from accessing demo monitors (tenant isolation)', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/monitors/${demoMonitorId}/stats`)
+        .set('Cookie', userACookie);
+
+      expect(res.status).toBe(404);
     });
   });
 });

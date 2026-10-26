@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
+  DEMO_CONFIG,
   DashboardSummaryDto,
   MonitorStatsDto,
   StatsWindow,
@@ -23,6 +24,11 @@ export class MetricsService {
    * Retrieves aggregated uptime and latency statistics for a specific monitor
    * over the specified time window ('24h' | '7d' | '30d').
    * Verifies ownership and returns 404 if the monitor does not belong to the user.
+   *
+   * Demo Policy:
+   * Only monitors marked isSeeded: true AND owned by the designated demo user
+   * (demo@devpulse.dev) utilize synthetic demo telemetry. All other monitors strictly
+   * query live, non-seeded checks (isSeeded: false).
    */
   async getMonitorStats(
     monitorId: string,
@@ -32,16 +38,25 @@ export class MetricsService {
     // Verify monitor ownership in database query
     const monitor = await this.prisma.monitor.findFirst({
       where: { id: monitorId, userId },
-      select: { id: true },
+      select: {
+        id: true,
+        isSeeded: true,
+        user: { select: { email: true } },
+      },
     });
 
     if (!monitor) {
       throw new NotFoundException(`Monitor ${monitorId} not found`);
     }
 
+    // Explicit demo-user boundary
+    const isDemo =
+      monitor.isSeeded === true &&
+      monitor.user.email === DEMO_CONFIG.DEMO_USER_EMAIL;
+
     const range = getTimeWindowRange(window);
 
-    // Query non-seeded checks within the window range
+    // Query checks: seeded checks for demo monitor, live non-seeded checks for real monitors
     const checks = await this.prisma.checkResult.findMany({
       where: {
         monitorId,
@@ -49,7 +64,7 @@ export class MetricsService {
           gte: range.from,
           lte: range.to,
         },
-        isSeeded: false,
+        isSeeded: isDemo,
       },
       select: {
         checkedAt: true,
@@ -97,16 +112,32 @@ export class MetricsService {
       p95LatencyMs,
       p99LatencyMs,
       series,
+      isDemo,
     };
   }
 
   /**
    * Computes system-wide dashboard summary metrics for an authenticated user:
    * monitor counts, health status breakdown, active incidents, and 24h uptime.
+   *
+   * Demo Policy:
+   * If the authenticated user is the designated demo account (demo@devpulse.dev),
+   * summary telemetry aggregates demo seeded data. For all real users, summary
+   * telemetry strictly aggregates live, non-seeded records (isSeeded: false).
    */
   async getDashboardSummary(userId: string): Promise<DashboardSummaryDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+
+    const isDemo = user?.email === DEMO_CONFIG.DEMO_USER_EMAIL;
+
     const monitors = await this.prisma.monitor.findMany({
-      where: { userId },
+      where: {
+        userId,
+        isSeeded: isDemo,
+      },
       select: { id: true, isPaused: true },
     });
 
@@ -128,6 +159,7 @@ export class MetricsService {
         neverCheckedEndpoints: 0,
         activeIncidents: 0,
         systemUptime24h: null,
+        isDemo,
       };
     }
 
@@ -138,14 +170,15 @@ export class MetricsService {
       where: {
         monitor: { userId },
         isResolved: false,
+        isSeeded: isDemo,
       },
     });
 
-    // Find latest check for each monitor (non-seeded) using DISTINCT ON
+    // Find latest check for each monitor using DISTINCT ON
     const latestChecks = await this.prisma.checkResult.findMany({
       where: {
         monitorId: { in: monitorIds },
-        isSeeded: false,
+        isSeeded: isDemo,
       },
       distinct: ['monitorId'],
       orderBy: [{ monitorId: 'asc' }, { checkedAt: 'desc' }],
@@ -156,7 +189,10 @@ export class MetricsService {
     });
 
     const latestCheckMap = new Map<string, boolean>();
-    for (const c of latestChecks as Array<{ monitorId: string; isSuccess: boolean }>) {
+    for (const c of latestChecks as Array<{
+      monitorId: string;
+      isSuccess: boolean;
+    }>) {
       latestCheckMap.set(c.monitorId, c.isSuccess);
     }
 
@@ -182,7 +218,7 @@ export class MetricsService {
         where: {
           monitor: { userId },
           checkedAt: { gte: twentyFourHoursAgo },
-          isSeeded: false,
+          isSeeded: isDemo,
         },
       }),
       this.prisma.checkResult.count({
@@ -190,7 +226,7 @@ export class MetricsService {
           monitor: { userId },
           checkedAt: { gte: twentyFourHoursAgo },
           isSuccess: true,
-          isSeeded: false,
+          isSeeded: isDemo,
         },
       }),
     ]);
@@ -206,6 +242,7 @@ export class MetricsService {
       neverCheckedEndpoints,
       activeIncidents,
       systemUptime24h,
+      isDemo,
     };
   }
 }

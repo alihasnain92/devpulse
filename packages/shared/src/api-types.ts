@@ -125,6 +125,7 @@ export interface MonitorStatsDto {
   p95LatencyMs: number | null;
   p99LatencyMs: number | null;
   series: TimeBucketDto[];
+  isDemo?: boolean;
 }
 
 export interface DashboardSummaryDto {
@@ -136,4 +137,5 @@ export interface DashboardSummaryDto {
   neverCheckedEndpoints: number;
   activeIncidents: number;
   systemUptime24h: number | null;
+  isDemo?: boolean;
 }

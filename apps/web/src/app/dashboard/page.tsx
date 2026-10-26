@@ -196,18 +196,39 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Demonstration Mode Banner */}
+        {summary?.isDemo && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 p-4 sm:p-5 flex items-start gap-4">
+            <Radio className="h-6 w-6 text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-1 text-sm">
+              <div className="font-semibold text-amber-300 flex items-center gap-2">
+                <span>Demonstration Mode Active — Simulated History</span>
+                <Badge
+                  variant="outline"
+                  className="border-amber-400/40 text-amber-300 text-xs"
+                >
+                  Synthetic Telemetry
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                You are currently viewing demonstration records pre-seeded for showcase purposes. All historical metrics, percentiles, and resolved incidents represent deterministic simulated data. Live user monitors remain strictly isolated.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Phase Architecture Banner */}
         <div className="rounded-xl border border-blue-500/20 bg-blue-950/20 p-4 sm:p-5 flex items-start gap-4">
           <ShieldCheck className="h-6 w-6 text-blue-400 shrink-0 mt-0.5" />
           <div className="space-y-1 text-sm">
             <div className="font-semibold text-blue-300 flex items-center gap-2">
-              <span>Phase 4 Active: Automated Incident Detection & Recovery</span>
+              <span>DevPulse Level 1 Active: Monitoring, Incident Recovery & Analytics</span>
               <Badge variant="outline" className="border-blue-400/30 text-blue-300 text-xs">
-                3-Failure Streak Trigger
+                Production Ready
               </Badge>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed">
-              devpulse automatically tracks consecutive failures, opens serialized active incidents with row-level locks, prevents duplicate records, and resolves incidents when endpoints recover.
+              Real-time SSRF-protected health checks, BullMQ recurring scheduling, automated consecutive failure incident detection, nearest-rank latency percentiles, and Recharts interactive visualizations.
             </p>
           </div>
         </div>

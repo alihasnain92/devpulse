@@ -350,6 +350,15 @@ export default function MonitorsPage() {
                           </Badge>
                         )}
 
+                        {monitor.isSeeded && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs border-amber-500/40 text-amber-400 bg-amber-500/10 font-medium"
+                          >
+                            Demo
+                          </Badge>
+                        )}
+
                         <Badge
                           variant="outline"
                           className="text-xs text-blue-400 border-blue-500/30 bg-blue-500/10 font-mono"

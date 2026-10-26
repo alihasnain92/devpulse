@@ -390,6 +390,15 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
                   Never Checked
                 </Badge>
               )}
+
+              {monitor.isSeeded && (
+                <Badge
+                  variant="outline"
+                  className="text-xs border-amber-500/40 text-amber-400 bg-amber-500/10 font-medium"
+                >
+                  Demo data — simulated history
+                </Badge>
+              )}
             </div>
 
             <div className="flex items-center gap-2 text-sm text-slate-400 font-mono">
@@ -552,11 +561,24 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
                     variant="outline"
                     className="border-blue-500/30 text-blue-400 bg-blue-500/10 text-xs"
                   >
-                    Phase 5 Active
+                    Telemetry Analytics
                   </Badge>
+                  {stats?.isDemo && (
+                    <Badge
+                      variant="outline"
+                      className="border-amber-500/30 text-amber-400 bg-amber-500/10 text-xs"
+                    >
+                      Simulated History
+                    </Badge>
+                  )}
                 </div>
                 <CardDescription className="text-slate-400 mt-0.5">
                   Nearest-rank latency percentiles, aggregate uptime telemetry, and time-series history
+                  {stats?.isDemo && (
+                    <span className="block text-amber-400/90 text-[11px] mt-0.5 font-medium">
+                      • Demo mode: Displaying simulated 30-day telemetry for showcase.
+                    </span>
+                  )}
                 </CardDescription>
               </div>
 

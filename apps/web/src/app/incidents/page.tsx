@@ -351,6 +351,15 @@ export default function IncidentsPage() {
                             </Badge>
                           )}
 
+                          {incident.isSeeded && (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-500/40 bg-amber-500/10 text-amber-400 text-[10px]"
+                            >
+                              Simulated Event
+                            </Badge>
+                          )}
+
                           <Link
                             href={`/monitors/${incident.monitorId}`}
                             className="font-semibold text-white hover:text-blue-400 flex items-center gap-1.5 transition-colors"
