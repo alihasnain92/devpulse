@@ -29,16 +29,16 @@ export function ConfirmDialog({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 animate-in fade-in duration-100">
+      <div className="w-full max-w-md bg-[var(--surface)] border border-[var(--border)] rounded-[8px] p-6 space-y-4">
         <div>
-          <h3 className="text-lg font-semibold text-white">{title}</h3>
-          <p className="text-sm text-slate-400 mt-2 leading-relaxed">
+          <h3 className="text-base font-semibold text-[var(--text-primary)] tracking-tight">{title}</h3>
+          <p className="text-xs text-[var(--text-secondary)] mt-2 leading-relaxed">
             {description}
           </p>
         </div>
 
-        <div className="flex justify-end gap-3 pt-2">
+        <div className="flex justify-end gap-2.5 pt-2">
           <Button
             type="button"
             variant="outline"
