@@ -40,3 +40,7 @@ postgres_data/
 redis_data/
 
 *.tsbuildinfo
+
+# AI Agent Skills
+.agent/
+.agents/
