@@ -9,8 +9,9 @@ import { Navbar } from '@/components/navbar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Plus, AlertCircle, ShieldAlert } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { OperationalPageHeader } from '@/components/ui/operational-page-header';
+import { ArrowLeft, ShieldCheck, AlertCircle } from 'lucide-react';
 
 export default function NewMonitorPage() {
   const router = useRouter();
@@ -104,228 +105,210 @@ export default function NewMonitorPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] flex flex-col">
       <Navbar />
 
-      <main className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
         {/* Back Link */}
         <div>
           <Link
             href="/monitors"
-            className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--border-focus)] rounded-[2px]"
           >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back to Monitors</span>
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span>Monitors</span>
           </Link>
         </div>
 
-        {/* Title */}
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-            Create API Monitor
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Configure an endpoint target for automated health checks.
-          </p>
-        </div>
+        {/* Page Header */}
+        <OperationalPageHeader
+          eyebrow="Configuration"
+          title="Create API Monitor"
+          description="Configure an automated health check endpoint, execution cadence, and expected response criteria."
+        />
 
-        {/* SSRF Boundary Notice */}
-        <div className="rounded-xl border border-amber-500/20 bg-amber-950/20 p-4 flex items-start gap-3.5">
-          <ShieldAlert className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
-          <div className="text-xs text-slate-400 space-y-1">
-            <span className="font-semibold text-amber-300 block">
-              SSRF & Security Scope Notice
+        {/* Operational Security Notice */}
+        <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface-subtle)] p-3.5 flex items-start gap-3">
+          <ShieldCheck className="h-4 w-4 text-[var(--primary)] shrink-0 mt-0.5" />
+          <div className="text-xs text-[var(--text-secondary)] space-y-0.5 leading-relaxed">
+            <span className="font-semibold text-[var(--text-primary)] block">
+              SSRF & Egress Protection Active
             </span>
             <span>
-              URL syntax is validated now (HTTP/HTTPS only). Background network check execution and SSRF defenses (IP/CIDR blocking, socket-level DNS pinning, redirect revalidation) will be active when the Phase 3 worker is deployed.
+              Target URLs undergo strict outbound SSRF filtering, private CIDR blocking, and socket-level DNS pinning across all scheduled checks.
             </span>
           </div>
         </div>
 
+        {/* Validation Error Message */}
+        {errorMessage && (
+          <div
+            role="alert"
+            className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3.5 flex items-center gap-2.5 text-xs text-[var(--status-down)]"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
         {/* Form Card */}
-        <Card className="border-slate-800 bg-slate-900/60 shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-lg text-white">Monitor Details</CardTitle>
-            <CardDescription className="text-slate-400">
-              Specify the target URL, HTTP method, check cadence, and expected status.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Error Banner */}
-              {errorMessage && (
-                <div className="rounded-lg border border-red-500/30 bg-red-950/30 p-3.5 flex items-center gap-3 text-red-300 text-sm">
-                  <AlertCircle className="h-5 w-5 shrink-0 text-red-400" />
-                  <span>{errorMessage}</span>
+        <Card className="p-0 overflow-hidden">
+          <form onSubmit={handleSubmit}>
+            <div className="p-5 sm:p-6 space-y-5">
+              {/* Group 1: Identity & Target */}
+              <div className="space-y-4">
+                <div className="border-b border-[var(--border-subtle)] pb-1.5">
+                  <h2 className="text-xs font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                    Endpoint Details
+                  </h2>
                 </div>
-              )}
 
-              {/* Monitor Name */}
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-slate-200">
-                  Monitor Name <span className="text-red-400">*</span>
-                </Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="e.g., Auth Service Health"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  maxLength={100}
-                  required
-                  disabled={isLoading}
-                  className="bg-slate-900/80 border-slate-700"
-                />
-                <p className="text-xs text-slate-500">
-                  A friendly label to distinguish this endpoint in alerts and dashboards.
-                </p>
-              </div>
-
-              {/* URL */}
-              <div className="space-y-2">
-                <Label htmlFor="url" className="text-slate-200">
-                  Target Endpoint URL <span className="text-red-400">*</span>
-                </Label>
-                <Input
-                  id="url"
-                  type="url"
-                  placeholder="https://api.example.com/health"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  required
-                  disabled={isLoading}
-                  className="bg-slate-900/80 border-slate-700 font-mono text-sm"
-                />
-                <p className="text-xs text-slate-500">
-                  Accepts only public HTTP or HTTPS web services.
-                </p>
-              </div>
-
-              {/* HTTP Method */}
-              <div className="space-y-2">
-                <Label className="text-slate-200">HTTP Method</Label>
-                <div className="flex gap-4">
-                  <label
-                    className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                      method === HttpMethod.GET
-                        ? 'border-blue-500 bg-blue-950/30 text-white'
-                        : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="method"
-                      value={HttpMethod.GET}
-                      checked={method === HttpMethod.GET}
-                      onChange={() => setMethod(HttpMethod.GET)}
-                      className="sr-only"
-                    />
-                    <span className="font-semibold text-sm">GET</span>
-                    <span className="text-xs text-slate-500 hidden sm:inline">(Standard)</span>
-                  </label>
-
-                  <label
-                    className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                      method === HttpMethod.HEAD
-                        ? 'border-blue-500 bg-blue-950/30 text-white'
-                        : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="method"
-                      value={HttpMethod.HEAD}
-                      checked={method === HttpMethod.HEAD}
-                      onChange={() => setMethod(HttpMethod.HEAD)}
-                      className="sr-only"
-                    />
-                    <span className="font-semibold text-sm">HEAD</span>
-                    <span className="text-xs text-slate-500 hidden sm:inline">(Headers Only)</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Cadence & Thresholds */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Interval */}
-                <div className="space-y-2">
-                  <Label htmlFor="interval" className="text-slate-200">
-                    Interval (seconds)
-                  </Label>
+                {/* Monitor Name */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="monitor-name">Service / Monitor Name</Label>
                   <Input
-                    id="interval"
-                    type="number"
-                    min={MONITOR_LIMITS.MIN_INTERVAL_SECONDS}
-                    max={MONITOR_LIMITS.MAX_INTERVAL_SECONDS}
-                    value={intervalSeconds}
-                    onChange={(e) => setIntervalSeconds(Number(e.target.value))}
-                    disabled={isLoading}
-                    className="bg-slate-900/80 border-slate-700 font-mono text-sm"
+                    id="monitor-name"
+                    type="text"
+                    required
+                    placeholder="e.g. Production Billing API"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
                   />
-                  <p className="text-[11px] text-slate-500">30s to 3600s (1hr)</p>
+                  <p className="text-[11px] text-[var(--text-muted)]">
+                    Descriptive name shown in dashboards, incident alerts, and notifications.
+                  </p>
                 </div>
 
-                {/* Timeout */}
-                <div className="space-y-2">
-                  <Label htmlFor="timeout" className="text-slate-200">
-                    Timeout (seconds)
-                  </Label>
-                  <Input
-                    id="timeout"
-                    type="number"
-                    min={1}
-                    max={MONITOR_LIMITS.MAX_TIMEOUT_MS / 1000}
-                    value={timeoutSeconds}
-                    onChange={(e) => setTimeoutSeconds(Number(e.target.value))}
-                    disabled={isLoading}
-                    className="bg-slate-900/80 border-slate-700 font-mono text-sm"
-                  />
-                  <p className="text-[11px] text-slate-500">1s to 30s</p>
+                {/* Method & URL Sharing Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div className="space-y-1.5 sm:col-span-1">
+                    <Label htmlFor="monitor-method">HTTP Method</Label>
+                    <select
+                      id="monitor-method"
+                      value={method}
+                      onChange={(e) => setMethod(e.target.value as HttpMethod)}
+                      className="w-full h-8.5 px-2.5 py-1 text-xs rounded-[4px] border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] font-mono focus-visible:outline-none focus-visible:border-[var(--border-focus)] focus-visible:ring-1 focus-visible:ring-[var(--border-focus)]"
+                    >
+                      <option value={HttpMethod.GET}>GET</option>
+                      <option value={HttpMethod.HEAD}>HEAD</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-3">
+                    <Label htmlFor="monitor-url">Target Endpoint URL</Label>
+                    <Input
+                      id="monitor-url"
+                      type="url"
+                      required
+                      placeholder="https://api.example.com/health"
+                      value={url}
+                      onChange={(e) => setUrl(e.target.value)}
+                      className="font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 2: Check Schedule & Limits */}
+              <div className="space-y-4 pt-2">
+                <div className="border-b border-[var(--border-subtle)] pb-1.5">
+                  <h2 className="text-xs font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                    Execution Schedule
+                  </h2>
                 </div>
 
-                {/* Expected Status */}
-                <div className="space-y-2">
-                  <Label htmlFor="expectedStatus" className="text-slate-200">
-                    Expected Status
-                  </Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Interval */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="monitor-interval">Check Interval</Label>
+                      <span className="text-[11px] font-mono text-[var(--text-muted)]">
+                        {MONITOR_LIMITS.MIN_INTERVAL_SECONDS}s – {MONITOR_LIMITS.MAX_INTERVAL_SECONDS}s
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        id="monitor-interval"
+                        type="number"
+                        min={MONITOR_LIMITS.MIN_INTERVAL_SECONDS}
+                        max={MONITOR_LIMITS.MAX_INTERVAL_SECONDS}
+                        required
+                        value={intervalSeconds}
+                        onChange={(e) => setIntervalSeconds(Number(e.target.value))}
+                        className="font-mono tabular-nums pr-16"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono text-[var(--text-muted)] pointer-events-none">
+                        seconds
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Timeout */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="monitor-timeout">Request Timeout</Label>
+                      <span className="text-[11px] font-mono text-[var(--text-muted)]">
+                        Max {MONITOR_LIMITS.MAX_TIMEOUT_MS / 1000}s
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        id="monitor-timeout"
+                        type="number"
+                        min={1}
+                        max={MONITOR_LIMITS.MAX_TIMEOUT_MS / 1000}
+                        required
+                        value={timeoutSeconds}
+                        onChange={(e) => setTimeoutSeconds(Number(e.target.value))}
+                        className="font-mono tabular-nums pr-16"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono text-[var(--text-muted)] pointer-events-none">
+                        seconds
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 3: Expected Response Criteria */}
+              <div className="space-y-4 pt-2">
+                <div className="border-b border-[var(--border-subtle)] pb-1.5">
+                  <h2 className="text-xs font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                    Response Validation
+                  </h2>
+                </div>
+
+                <div className="space-y-1.5 sm:max-w-xs">
+                  <Label htmlFor="monitor-status">Expected HTTP Status Code</Label>
                   <Input
-                    id="expectedStatus"
+                    id="monitor-status"
                     type="number"
                     min={100}
                     max={599}
+                    required
                     value={expectedStatus}
                     onChange={(e) => setExpectedStatus(Number(e.target.value))}
-                    disabled={isLoading}
-                    className="bg-slate-900/80 border-slate-700 font-mono text-sm"
+                    className="font-mono tabular-nums"
                   />
-                  <p className="text-[11px] text-slate-500">e.g. 200, 204</p>
+                  <p className="text-[11px] text-[var(--text-muted)]">
+                    Responses with differing status codes trigger failure counting.
+                  </p>
                 </div>
               </div>
+            </div>
 
-              {/* Submit / Cancel Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
-                <Link href="/monitors">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={isLoading}
-                    className="border-slate-700 text-slate-300 hover:text-white"
-                  >
-                    Cancel
-                  </Button>
-                </Link>
-
-                <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className="gap-2 min-w-[140px]"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>{isLoading ? 'Creating...' : 'Create Monitor'}</span>
+            {/* Actions Bar */}
+            <div className="p-4 sm:p-5 border-t border-[var(--border)] bg-[var(--surface-subtle)] flex items-center justify-end gap-2.5">
+              <Link href="/monitors">
+                <Button type="button" variant="outline" size="sm">
+                  Cancel
                 </Button>
-              </div>
-            </form>
-          </CardContent>
+              </Link>
+              <Button type="submit" size="sm" disabled={isLoading} className="gap-1.5 font-medium">
+                {isLoading ? 'Creating Monitor...' : 'Save & Start Monitoring'}
+              </Button>
+            </div>
+          </form>
         </Card>
       </main>
     </div>

@@ -9,22 +9,30 @@ import { Navbar } from '@/components/navbar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { StatusIndicator } from '@/components/ui/status-indicator';
+import { OperationalPageHeader } from '@/components/ui/operational-page-header';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { MonitorIdentity } from '@/components/monitors/monitor-identity';
+import { MonitorActions } from '@/components/monitors/monitor-actions';
 import {
-  Activity,
   Plus,
-  Play,
-  Pause,
-  Edit,
-  Trash2,
-  ExternalLink,
-  Clock,
-  Radio,
   AlertCircle,
   CheckCircle2,
-  Zap,
   RefreshCw,
+  Search,
 } from 'lucide-react';
+
+function timeAgo(dateString: string): string {
+  const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
 
 export default function MonitorsPage() {
   const { isLoading: authLoading } = useAuth();
@@ -35,6 +43,7 @@ export default function MonitorsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [checkingIds, setCheckingIds] = useState<Record<string, boolean>>({});
+  const [searchQuery, setSearchQuery] = useState('');
   const [feedbackMessage, setFeedbackMessage] = useState<{
     type: 'success' | 'error' | 'info';
     text: string;
@@ -124,7 +133,7 @@ export default function MonitorsPage() {
       setCheckingIds((prev) => ({ ...prev, [monitor.id]: true }));
       setFeedbackMessage({
         type: 'info',
-        text: `Queued health check for "${monitor.name}"...`,
+        text: `Triggered health check for "${monitor.name}"...`,
       });
 
       const initialTime = latestChecks[monitor.id]?.checkedAt;
@@ -193,71 +202,73 @@ export default function MonitorsPage() {
     }
   };
 
+  const filteredMonitors = monitors.filter((m) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return m.name.toLowerCase().includes(q) || m.url.toLowerCase().includes(q);
+  });
+
   if (authLoading || (loading && monitors.length === 0)) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+      <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] flex flex-col">
         <Navbar />
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="flex items-center gap-3 text-slate-400">
-            <Activity className="h-6 w-6 animate-pulse text-blue-500" />
-            <span>Loading monitor dashboard...</span>
-          </div>
-        </div>
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 animate-pulse">
+          <div className="h-10 w-48 bg-[var(--surface)] rounded-[4px]" />
+          <div className="h-64 bg-[var(--surface)] rounded-[6px]" />
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] flex flex-col">
       <Navbar />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-3">
-              <span>Monitors</span>
-              <Badge variant="secondary" className="text-xs bg-slate-800 text-slate-300">
-                {monitors.length} total
-              </Badge>
-            </h1>
-            <p className="text-sm text-slate-400 mt-1">
-              Configure, pause, resume, and inspect HTTP/HTTPS health check endpoints.
-            </p>
-          </div>
+        <OperationalPageHeader
+          eyebrow="Target Directory"
+          title="Monitors"
+          badge={
+            <Badge variant="secondary" className="font-mono text-xs tabular-nums">
+              {monitors.length} total
+            </Badge>
+          }
+          description="Configure, pause, resume, and inspect HTTP/HTTPS health check endpoints."
+          actions={
+            <Link href="/monitors/new">
+              <Button size="sm" className="gap-1.5 text-xs">
+                <Plus className="h-3.5 w-3.5" />
+                <span>Create Monitor</span>
+              </Button>
+            </Link>
+          }
+        />
 
-          <Link href="/monitors/new">
-            <Button className="gap-2 shadow-lg shadow-blue-600/20">
-              <Plus className="h-4 w-4" />
-              <span>Create Monitor</span>
-            </Button>
-          </Link>
-        </div>
-
-        {/* Feedback Alert Banner */}
+        {/* Feedback Alert Toast */}
         {feedbackMessage && (
           <div
-            className={`rounded-xl border p-4 flex items-center justify-between gap-3 text-sm animate-in fade-in duration-150 ${
+            className={`rounded-[4px] border p-3 flex items-center justify-between gap-3 text-xs transition-colors ${
               feedbackMessage.type === 'success'
-                ? 'border-emerald-500/30 bg-emerald-950/20 text-emerald-300'
+                ? 'border-[var(--status-healthy)]/40 bg-[var(--status-healthy-bg)]/20 text-[var(--status-healthy)]'
                 : feedbackMessage.type === 'error'
-                  ? 'border-red-500/30 bg-red-950/20 text-red-300'
-                  : 'border-blue-500/30 bg-blue-950/20 text-blue-300'
+                  ? 'border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 text-[var(--status-down)]'
+                  : 'border-[var(--primary)]/40 bg-[var(--primary)]/10 text-[var(--text-primary)]'
             }`}
           >
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               {feedbackMessage.type === 'success' ? (
-                <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-[var(--status-healthy)]" />
               ) : feedbackMessage.type === 'error' ? (
-                <AlertCircle className="h-5 w-5 text-red-400 shrink-0" />
+                <AlertCircle className="h-4 w-4 shrink-0 text-[var(--status-down)]" />
               ) : (
-                <RefreshCw className="h-5 w-5 text-blue-400 shrink-0 animate-spin" />
+                <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" />
               )}
               <span>{feedbackMessage.text}</span>
             </div>
             <button
               onClick={() => setFeedbackMessage(null)}
-              className="text-xs text-slate-400 hover:text-white"
+              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] underline"
             >
               Dismiss
             </button>
@@ -266,223 +277,288 @@ export default function MonitorsPage() {
 
         {/* Fetch Error */}
         {error && (
-          <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-4 flex items-center gap-3 text-red-300 text-sm">
-            <AlertCircle className="h-5 w-5 shrink-0 text-red-400" />
-            <span>{error}</span>
+          <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3.5 flex items-center justify-between gap-3 text-xs text-[var(--status-down)]">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => loadMonitors()} className="h-6 text-[11px]">
+              Retry
+            </Button>
           </div>
         )}
 
-        {/* Empty State vs List */}
+        {/* Search & Filter Toolbar (Only when monitors exist) */}
+        {monitors.length > 0 && (
+          <div className="flex items-center justify-between gap-4">
+            <div className="relative w-full max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--text-muted)]" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Filter by name or URL..."
+                className="w-full h-8 pl-8 pr-3 text-xs rounded-[4px] border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus-visible:outline-none focus-visible:border-[var(--border-focus)] focus-visible:ring-1 focus-visible:ring-[var(--border-focus)]"
+              />
+            </div>
+            <div className="text-xs font-mono text-[var(--text-muted)] shrink-0 hidden sm:block tabular-nums">
+              Showing {filteredMonitors.length} of {monitors.length}
+            </div>
+          </div>
+        )}
+
+        {/* Empty State vs Table */}
         {monitors.length === 0 ? (
-          <Card className="border-dashed border-slate-800 bg-slate-900/20 text-center py-20 px-4">
-            <CardContent className="space-y-4 max-w-md mx-auto">
-              <div className="h-16 w-16 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center mx-auto text-blue-400">
-                <Radio className="h-8 w-8" />
+          <Card className="border-dashed">
+            <CardContent className="py-16 text-center space-y-3 max-w-sm mx-auto">
+              <div className="text-sm font-semibold text-[var(--text-primary)]">
+                No monitors configured
               </div>
-              <div className="space-y-1">
-                <h3 className="text-xl font-semibold text-white">No monitors configured</h3>
-                <p className="text-sm text-slate-400">
-                  You don’t have any active monitors. Create your first endpoint target to manage intervals, timeouts, and expected statuses.
-                </p>
-              </div>
+              <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                Add an HTTP endpoint target to begin automated health checks, latency tracking, and outage detection.
+              </p>
               <div className="pt-2">
                 <Link href="/monitors/new">
-                  <Button className="gap-2">
-                    <Plus className="h-4 w-4" />
+                  <Button size="sm" className="gap-1.5">
+                    <Plus className="h-3.5 w-3.5" />
                     <span>Create Monitor</span>
                   </Button>
                 </Link>
               </div>
             </CardContent>
           </Card>
+        ) : filteredMonitors.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center space-y-2">
+              <p className="text-xs text-[var(--text-muted)]">
+                No monitors matching &quot;{searchQuery}&quot;.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSearchQuery('')}
+                className="text-xs font-mono"
+              >
+                Clear filter
+              </Button>
+            </CardContent>
+          </Card>
         ) : (
-          <div className="space-y-4">
-            {monitors.map((monitor) => {
-              const check = latestChecks[monitor.id];
-              const isChecking = Boolean(checkingIds[monitor.id]);
+          <Card className="p-0 overflow-hidden">
+            {/* Desktop / Tablet Table View (>= 640px) */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-[var(--border)] text-[var(--text-muted)] font-mono text-[11px] bg-[var(--surface-subtle)]">
+                    <th className="py-2.5 px-3 font-medium w-8 text-center">STATUS</th>
+                    <th className="py-2.5 px-3 font-medium">NAME / TARGET</th>
+                    <th className="py-2.5 px-3 font-medium hidden lg:table-cell">EXPECTED</th>
+                    <th className="py-2.5 px-3 font-medium">CADENCE</th>
+                    <th className="py-2.5 px-3 font-medium hidden lg:table-cell">TIMEOUT</th>
+                    <th className="py-2.5 px-3 font-medium">LATEST CHECK</th>
+                    <th className="py-2.5 px-4 font-medium text-right">ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {filteredMonitors.map((monitor) => {
+                    const check = latestChecks[monitor.id];
+                    const isPaused = monitor.isPaused;
 
-              return (
-                <Card
-                  key={monitor.id}
-                  className="border-slate-800 bg-slate-900/50 hover:border-slate-700/80 transition-all shadow-xs"
-                >
-                  <div className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    {/* Left Column: Info */}
-                    <div className="space-y-2 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2.5">
+                    let status: 'healthy' | 'down' | 'disabled' = 'healthy';
+                    if (isPaused) {
+                      status = 'disabled';
+                    } else if (check && !check.isSuccess) {
+                      status = 'down';
+                    }
+
+                    return (
+                      <tr
+                        key={monitor.id}
+                        className="hover:bg-[var(--surface-hover)] transition-colors h-11"
+                      >
+                        {/* Status */}
+                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                          <StatusIndicator
+                            status={status}
+                            variant="compact"
+                            label={
+                              isPaused
+                                ? 'Paused'
+                                : check
+                                  ? check.isSuccess
+                                    ? 'Healthy'
+                                    : 'Failing'
+                                  : 'Pending'
+                            }
+                            isProcessing={checkingIds[monitor.id]}
+                          />
+                        </td>
+
+                        {/* Name + Target URL */}
+                        <td className="py-2.5 px-3 min-w-[200px] max-w-sm">
+                          <MonitorIdentity monitor={monitor} />
+                        </td>
+
+                        {/* Expected Status (hidden < 1024px) */}
+                        <td className="py-2.5 px-3 whitespace-nowrap hidden lg:table-cell font-mono text-[var(--text-secondary)] tabular-nums">
+                          HTTP {monitor.expectedStatus}
+                        </td>
+
+                        {/* Interval */}
+                        <td className="py-2.5 px-3 whitespace-nowrap font-mono text-[var(--text-secondary)] tabular-nums">
+                          {monitor.intervalSeconds}s
+                        </td>
+
+                        {/* Timeout (hidden < 1024px) */}
+                        <td className="py-2.5 px-3 whitespace-nowrap hidden lg:table-cell font-mono text-[var(--text-muted)] tabular-nums">
+                          {monitor.timeoutMs / 1000}s
+                        </td>
+
+                        {/* Latest Check Result */}
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          {check ? (
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                variant={check.isSuccess ? 'healthy' : 'down'}
+                                className="text-[10px] font-mono px-1 py-0 tabular-nums"
+                              >
+                                {check.statusCode ?? 'ERR'}
+                              </Badge>
+                              <span className="font-mono text-xs text-[var(--text-secondary)] tabular-nums">
+                                {check.latencyMs}ms
+                              </span>
+                              <span className="text-[11px] text-[var(--text-muted)] hidden md:inline">
+                                {timeAgo(check.checkedAt)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-[var(--text-muted)] font-mono">
+                              Never checked
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-2.5 px-4 text-right whitespace-nowrap">
+                          <MonitorActions
+                            monitor={monitor}
+                            onTriggerCheck={handleTriggerCheck}
+                            onTogglePause={handleTogglePause}
+                            onDelete={openDeleteModal}
+                            isChecking={checkingIds[monitor.id]}
+                            isToggling={togglingId === monitor.id}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Structured Compact Records (< 640px) */}
+            <div className="sm:hidden divide-y divide-[var(--border)]">
+              {filteredMonitors.map((monitor) => {
+                const check = latestChecks[monitor.id];
+                const isPaused = monitor.isPaused;
+
+                let status: 'healthy' | 'down' | 'disabled' = 'healthy';
+                if (isPaused) {
+                  status = 'disabled';
+                } else if (check && !check.isSuccess) {
+                  status = 'down';
+                }
+
+                return (
+                  <div key={monitor.id} className="p-3.5 space-y-2.5">
+                    {/* Header line: Status + Name + Method */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <StatusIndicator
+                          status={status}
+                          variant="compact"
+                          label={
+                            isPaused
+                              ? 'Paused'
+                              : check
+                                ? check.isSuccess
+                                  ? 'Healthy'
+                                  : 'Failing'
+                                : 'Pending'
+                          }
+                          isProcessing={checkingIds[monitor.id]}
+                        />
                         <Link
                           href={`/monitors/${monitor.id}`}
-                          className="text-base sm:text-lg font-semibold text-white hover:text-blue-400 transition-colors"
+                          className="font-semibold text-sm text-[var(--text-primary)] hover:text-[var(--primary)] truncate"
                         >
                           {monitor.name}
                         </Link>
-
-                        <Badge
-                          variant={monitor.isPaused ? 'warning' : 'success'}
-                          className="text-xs uppercase font-bold"
-                        >
-                          {monitor.isPaused ? 'Paused' : 'Active'}
-                        </Badge>
-
-                        {/* Real Telemetry Outcome Badge */}
-                        {check ? (
-                          <Badge
-                            variant={check.isSuccess ? 'success' : 'destructive'}
-                            className="text-xs font-bold flex items-center gap-1 font-mono"
-                          >
-                            <span
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                check.isSuccess ? 'bg-emerald-400' : 'bg-red-400'
-                              }`}
-                            />
-                            <span>
-                              {check.isSuccess
-                                ? `${check.statusCode} OK • ${check.latencyMs}ms`
-                                : `${check.statusCode ?? 'ERR'} • ${check.latencyMs}ms`}
-                            </span>
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="text-xs text-slate-400 border-slate-700"
-                          >
-                            Never Checked
-                          </Badge>
-                        )}
-
-                        {monitor.isSeeded && (
-                          <Badge
-                            variant="outline"
-                            className="text-xs border-amber-500/40 text-amber-400 bg-amber-500/10 font-medium"
-                          >
-                            Demo
-                          </Badge>
-                        )}
-
-                        <Badge
-                          variant="outline"
-                          className="text-xs text-blue-400 border-blue-500/30 bg-blue-500/10 font-mono"
-                        >
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="px-1 py-0 rounded-[2px] border border-[var(--border)] text-[10px] font-mono text-[var(--text-secondary)]">
                           {monitor.method}
-                        </Badge>
-
-                        <Badge
-                          variant="outline"
-                          className="text-xs text-slate-400 border-slate-700 font-mono"
-                        >
-                          Expected {monitor.expectedStatus}
-                        </Badge>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
-                        <span className="font-mono text-xs flex items-center gap-1.5 truncate max-w-sm sm:max-w-lg text-slate-300">
-                          {monitor.url}
-                          <a
-                            href={monitor.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-slate-500 hover:text-slate-300 inline-flex"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
                         </span>
-
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5 text-slate-500" />
-                          Interval: {monitor.intervalSeconds}s
-                        </span>
-
-                        <span>Timeout: {monitor.timeoutMs / 1000}s</span>
-
-                        {check && (
-                          <span className="text-slate-500">
-                            Last checked: {new Date(check.checkedAt).toLocaleTimeString()}
-                          </span>
+                        {isPaused && (
+                          <Badge variant="warning" className="text-[9px] font-mono px-1 py-0">
+                            PAUSED
+                          </Badge>
                         )}
                       </div>
-
-                      {check?.errorMessage && (
-                        <div className="text-[11px] text-red-400 font-mono flex items-center gap-1.5 pt-0.5 truncate max-w-xl">
-                          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{check.errorMessage}</span>
-                        </div>
-                      )}
                     </div>
 
-                    {/* Right Column: Actions */}
-                    <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-800">
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handleTriggerCheck(monitor)}
-                        disabled={isChecking || monitor.isPaused}
-                        className="gap-1.5 text-xs h-9 bg-blue-600 hover:bg-blue-500 text-white"
-                      >
-                        {isChecking ? (
+                    {/* Target URL */}
+                    <div className="font-mono text-xs text-[var(--text-muted)] truncate select-all">
+                      {monitor.url}
+                    </div>
+
+                    {/* Telemetry info row */}
+                    <div className="flex items-center justify-between text-xs font-mono text-[var(--text-secondary)] pt-0.5">
+                      <div className="flex items-center gap-2">
+                        {check ? (
                           <>
-                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                            <span>Checking...</span>
+                            <Badge
+                              variant={check.isSuccess ? 'healthy' : 'down'}
+                              className="text-[10px] font-mono px-1 py-0 tabular-nums"
+                            >
+                              {check.statusCode ?? 'ERR'}
+                            </Badge>
+                            <span className="tabular-nums">{check.latencyMs}ms</span>
+                            <span className="text-[11px] text-[var(--text-muted)]">
+                              {timeAgo(check.checkedAt)}
+                            </span>
                           </>
                         ) : (
-                          <>
-                            <Zap className="h-3.5 w-3.5" />
-                            <span>Run Check</span>
-                          </>
+                          <span className="text-[11px] text-[var(--text-muted)]">Never checked</span>
                         )}
-                      </Button>
+                      </div>
+                      <span className="text-[11px] text-[var(--text-muted)] tabular-nums">
+                        Cadence: {monitor.intervalSeconds}s
+                      </span>
+                    </div>
 
-                      <Button
-                        variant={monitor.isPaused ? 'outline' : 'secondary'}
-                        size="sm"
-                        onClick={() => handleTogglePause(monitor)}
-                        disabled={togglingId === monitor.id}
-                        className="gap-1.5 text-xs h-9"
-                      >
-                        {monitor.isPaused ? (
-                          <>
-                            <Play className="h-3.5 w-3.5 text-emerald-400" />
-                            <span>Resume</span>
-                          </>
-                        ) : (
-                          <>
-                            <Pause className="h-3.5 w-3.5 text-amber-400" />
-                            <span>Pause</span>
-                          </>
-                        )}
-                      </Button>
-
+                    {/* Quick Actions Row */}
+                    <div className="pt-1 flex items-center justify-between border-t border-[var(--border-subtle)]">
                       <Link href={`/monitors/${monitor.id}`}>
-                        <Button variant="outline" size="sm" className="text-xs h-9 border-slate-700">
-                          Details
+                        <Button variant="ghost" size="sm" className="h-8 px-2 text-xs font-mono text-[var(--primary)]">
+                          View Details &rarr;
                         </Button>
                       </Link>
 
-                      <Link href={`/monitors/${monitor.id}/edit`}>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-9 w-9 border-slate-700 text-slate-300 hover:text-white"
-                          aria-label="Edit monitor"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </Link>
-
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        onClick={() => openDeleteModal(monitor)}
-                        className="h-9 w-9 bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white border border-red-500/30"
-                        aria-label="Delete monitor"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <MonitorActions
+                        monitor={monitor}
+                        onTriggerCheck={handleTriggerCheck}
+                        onTogglePause={handleTogglePause}
+                        onDelete={openDeleteModal}
+                        isChecking={checkingIds[monitor.id]}
+                        isToggling={togglingId === monitor.id}
+                      />
                     </div>
                   </div>
-                </Card>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </Card>
         )}
       </main>
 
@@ -490,15 +566,12 @@ export default function MonitorsPage() {
       <ConfirmDialog
         isOpen={deleteModalState.isOpen}
         title="Delete Monitor"
-        description={`Are you sure you want to delete "${deleteModalState.monitor?.name}"? All associated historical configuration and records will be permanently removed. This action cannot be undone.`}
+        description={`Are you sure you want to permanently delete "${deleteModalState.monitor?.name}"? All historical health check records and incident events associated with this monitor will be purged.`}
         confirmText="Delete Monitor"
-        cancelText="Cancel"
         isDestructive={true}
         isLoading={deleteModalState.isDeleting}
         onConfirm={handleConfirmDelete}
-        onCancel={() =>
-          setDeleteModalState({ isOpen: false, monitor: null, isDeleting: false })
-        }
+        onCancel={() => setDeleteModalState({ isOpen: false, monitor: null, isDeleting: false })}
       />
     </div>
   );

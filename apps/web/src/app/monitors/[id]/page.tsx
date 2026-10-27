@@ -14,42 +14,44 @@ import { apiClient } from '@/lib/api-client';
 import { Navbar } from '@/components/navbar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { StatusIndicator } from '@/components/ui/status-indicator';
+import { OperationalPageHeader } from '@/components/ui/operational-page-header';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LatencyChart } from '@/components/charts/latency-chart';
 import { UptimeBar } from '@/components/charts/uptime-bar';
 import {
-  Activity,
   ArrowLeft,
-  Clock,
   Edit,
-  ExternalLink,
-  Globe,
-  Pause,
-  Play,
   Trash2,
-  AlertCircle,
-  CheckCircle2,
-  Calendar,
-  Layers,
+  Play,
+  Pause,
   RefreshCw,
-  Zap,
+  AlertTriangle,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
 function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${Math.max(1, seconds)}s`;
+  if (seconds < 60) return `${Math.max(1, Math.round(seconds))}s`;
   const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
+  const secs = Math.round(seconds % 60);
   if (mins < 60) return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
   const hours = Math.floor(mins / 60);
   const remainingMins = mins % 60;
   return `${hours}h ${remainingMins}m`;
+}
+
+function timeAgo(dateString: string): string {
+  const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 interface MonitorDetailPageProps {
@@ -145,7 +147,7 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
         type: 'success',
         text: `Monitor ${newStatus ? 'paused' : 'resumed'} successfully.`,
       });
-      setTimeout(() => setFeedback(null), 3000);
+      setTimeout(() => setFeedback(null), 3500);
     } catch (err) {
       setFeedback({
         type: 'error',
@@ -162,42 +164,34 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
       setIsRunningCheck(true);
       setFeedback({
         type: 'info',
-        text: 'Check queued! Dispatching SSRF-safe request via BullMQ background worker...',
+        text: 'Executing manual health check...',
       });
 
-      const initialLatestTime = latestCheck?.checkedAt;
+      const initialTime = latestCheck?.checkedAt;
       await apiClient.triggerCheck(monitor.id);
 
-      // Poll for check completion (up to 8 attempts, 1s apart)
-      let resolvedCheck: CheckResultDto | null = null;
       for (let i = 0; i < 8; i++) {
         await new Promise((r) => setTimeout(r, 1000));
-        const updated = await apiClient.getLatestCheck(monitor.id).catch(() => null);
-        if (updated && updated.checkedAt !== initialLatestTime) {
-          resolvedCheck = updated;
+        const [updated, history] = await Promise.all([
+          apiClient.getLatestCheck(monitor.id).catch(() => null),
+          apiClient.getChecks(monitor.id, 10).catch(() => []),
+        ]);
+
+        if (updated && updated.checkedAt !== initialTime) {
+          setLatestCheck(updated);
+          setRecentChecks(history);
+          setFeedback({
+            type: updated.isSuccess ? 'success' : 'error',
+            text: updated.isSuccess
+              ? `Check passed with HTTP ${updated.statusCode} in ${updated.latencyMs}ms.`
+              : `Check failed: ${updated.errorMessage || `HTTP ${updated.statusCode}`}.`,
+          });
+          fetchStats(monitor.id, statsWindow);
           break;
         }
       }
 
-      await Promise.all([
-        fetchChecks(monitor.id),
-        fetchStats(monitor.id, statsWindow),
-      ]);
-
-      if (resolvedCheck) {
-        setFeedback({
-          type: resolvedCheck.isSuccess ? 'success' : 'error',
-          text: resolvedCheck.isSuccess
-            ? `Check passed! HTTP ${resolvedCheck.statusCode} in ${resolvedCheck.latencyMs}ms.`
-            : `Check failed: ${resolvedCheck.errorMessage || `HTTP ${resolvedCheck.statusCode}`}.`,
-        });
-      } else {
-        setFeedback({
-          type: 'success',
-          text: 'Check queued successfully. History refreshed.',
-        });
-      }
-      setTimeout(() => setFeedback(null), 5000);
+      setTimeout(() => setFeedback(null), 4500);
     } catch (err) {
       setFeedback({
         type: 'error',
@@ -215,842 +209,529 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
       await apiClient.deleteMonitor(monitor.id);
       router.push('/monitors');
     } catch (err) {
-      setIsDeleting(false);
-      setShowDeleteDialog(false);
       setFeedback({
         type: 'error',
         text: err instanceof Error ? err.message : 'Failed to delete monitor',
       });
+      setIsDeleting(false);
+      setShowDeleteDialog(false);
     }
   };
 
-  if (loading) {
+  if (loading && !monitor) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+      <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] flex flex-col">
         <Navbar />
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="flex items-center gap-3 text-slate-400">
-            <Activity className="h-6 w-6 animate-pulse text-blue-500" />
-            <span>Loading monitor configuration & telemetry...</span>
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 animate-pulse">
+          <div className="h-6 w-32 bg-[var(--surface)] rounded-[4px]" />
+          <div className="h-14 w-full bg-[var(--surface)] rounded-[6px]" />
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-20 bg-[var(--surface)] rounded-[4px]" />
+            ))}
           </div>
-        </div>
+          <div className="h-64 bg-[var(--surface)] rounded-[6px]" />
+        </main>
       </div>
     );
   }
 
   if (error || !monitor) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+      <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] flex flex-col">
         <Navbar />
-        <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-12">
-          <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-6 space-y-4 text-center">
-            <AlertCircle className="h-10 w-10 text-red-400 mx-auto" />
-            <h2 className="text-xl font-bold text-white">Monitor Not Found</h2>
-            <p className="text-sm text-slate-400 max-w-md mx-auto">
-              {error || 'The requested monitor does not exist or you do not have permission to view it.'}
-            </p>
-            <Link href="/monitors">
-              <Button variant="outline" className="gap-2 border-slate-700">
-                <ArrowLeft className="h-4 w-4" />
-                <span>Return to Monitors</span>
-              </Button>
-            </Link>
-          </div>
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center space-y-4">
+          <AlertCircle className="h-8 w-8 text-[var(--status-down)] mx-auto" />
+          <h2 className="text-xl font-semibold text-[var(--text-primary)]">
+            {error || 'Monitor not found'}
+          </h2>
+          <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto">
+            The requested monitor could not be loaded or may have been deleted.
+          </p>
+          <Link href="/monitors">
+            <Button size="sm" variant="outline" className="gap-1.5 font-mono">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>Back to Monitors</span>
+            </Button>
+          </Link>
         </main>
       </div>
     );
   }
 
+  // Status computation
+  let status: 'healthy' | 'down' | 'disabled' = 'healthy';
+  if (monitor.isPaused) {
+    status = 'disabled';
+  } else if (latestCheck && !latestCheck.isSuccess) {
+    status = 'down';
+  }
+
+  const activeIncidents = incidents.filter((i) => !i.isResolved);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] flex flex-col">
       <Navbar />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Navigation Breadcrumb */}
         <div>
           <Link
             href="/monitors"
-            className="inline-flex items-center gap-2 text-xs font-medium text-slate-400 hover:text-white transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--border-focus)] rounded-[2px]"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            <span>Back to Monitors</span>
+            <span>Monitors</span>
           </Link>
         </div>
 
-        {/* Feedback Alert Banner */}
+        {/* Operational Header */}
+        <OperationalPageHeader
+          eyebrow={`Target • ${monitor.method} • Interval ${monitor.intervalSeconds}s`}
+          title={monitor.name}
+          badge={
+            <StatusIndicator
+              status={status}
+              variant="badge"
+              label={
+                monitor.isPaused
+                  ? 'PAUSED'
+                  : latestCheck
+                    ? latestCheck.isSuccess
+                      ? 'HEALTHY'
+                      : 'FAILING'
+                    : 'PENDING'
+              }
+              isProcessing={isRunningCheck}
+            />
+          }
+          description={monitor.url}
+          actions={
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTriggerCheck}
+                disabled={isRunningCheck || monitor.isPaused}
+                className="gap-1.5 text-xs font-mono"
+                title={monitor.isPaused ? 'Cannot test paused monitor' : 'Execute immediate check'}
+              >
+                <RefreshCw className={`h-3 w-3 ${isRunningCheck ? 'animate-spin text-[var(--primary)]' : ''}`} />
+                <span>Check Now</span>
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTogglePause}
+                disabled={isToggling}
+                className="gap-1.5 text-xs"
+              >
+                {monitor.isPaused ? (
+                  <>
+                    <Play className="h-3 w-3 text-[var(--status-healthy)]" />
+                    <span>Resume</span>
+                  </>
+                ) : (
+                  <>
+                    <Pause className="h-3 w-3 text-[var(--status-warning)]" />
+                    <span>Pause</span>
+                  </>
+                )}
+              </Button>
+
+              <Link href={`/monitors/${monitor.id}/edit`}>
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+                  <Edit className="h-3 w-3" />
+                  <span>Edit</span>
+                </Button>
+              </Link>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowDeleteDialog(true)}
+                className="h-8 px-2 text-[var(--text-muted)] hover:text-[var(--status-down)] hover:bg-[var(--status-down-bg)]/20"
+                title="Delete monitor"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          }
+        />
+
+        {/* Feedback Alert Toast */}
         {feedback && (
           <div
-            className={`rounded-xl border p-4 flex items-center justify-between gap-3 text-sm animate-in fade-in duration-150 ${
+            className={`rounded-[4px] border p-3 flex items-center justify-between gap-3 text-xs transition-colors ${
               feedback.type === 'success'
-                ? 'border-emerald-500/30 bg-emerald-950/20 text-emerald-300'
+                ? 'border-[var(--status-healthy)]/40 bg-[var(--status-healthy-bg)]/20 text-[var(--status-healthy)]'
                 : feedback.type === 'error'
-                  ? 'border-red-500/30 bg-red-950/20 text-red-300'
-                  : 'border-blue-500/30 bg-blue-950/20 text-blue-300'
+                  ? 'border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 text-[var(--status-down)]'
+                  : 'border-[var(--primary)]/40 bg-[var(--primary)]/10 text-[var(--text-primary)]'
             }`}
           >
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               {feedback.type === 'success' ? (
-                <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-[var(--status-healthy)]" />
               ) : feedback.type === 'error' ? (
-                <AlertCircle className="h-5 w-5 text-red-400 shrink-0" />
+                <AlertCircle className="h-4 w-4 shrink-0 text-[var(--status-down)]" />
               ) : (
-                <RefreshCw className="h-5 w-5 text-blue-400 shrink-0 animate-spin" />
+                <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" />
               )}
               <span>{feedback.text}</span>
             </div>
             <button
               onClick={() => setFeedback(null)}
-              className="text-xs text-slate-400 hover:text-white"
+              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] underline"
             >
               Dismiss
             </button>
           </div>
         )}
 
-        {/* Active Outage Alert Banner */}
-        {(() => {
-          const activeIncident = incidents.find((i) => !i.isResolved);
-          if (!activeIncident) return null;
-          const elapsed = Math.max(
-            0,
-            Math.floor((Date.now() - new Date(activeIncident.startedAt).getTime()) / 1000),
-          );
-
-          return (
-            <div className="rounded-xl border border-red-500/40 bg-red-950/30 p-4 sm:p-5 flex items-start gap-4">
-              <div className="flex h-3 w-3 relative mt-1 shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-              </div>
-              <div className="space-y-1.5 flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-red-300">
-                    Active Service Outage Detected
-                  </span>
-                  <Badge
-                    variant="destructive"
-                    className="bg-red-900/60 text-red-200 text-xs uppercase"
-                  >
-                    Ongoing Outage
+        {/* Active Incident Banner (if this monitor is currently failing) */}
+        {activeIncidents.length > 0 && (
+          <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/25 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-[var(--status-down)] shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold text-sm text-[var(--text-primary)] flex items-center gap-2">
+                  <span>Active Incident Detected</span>
+                  <Badge variant="destructive" className="text-[10px] font-mono px-1.5 py-0">
+                    ONGOING
                   </Badge>
                 </div>
-                <div className="text-xs text-slate-300 leading-relaxed font-mono bg-red-950/60 p-2.5 rounded border border-red-900/50 break-all">
-                  {activeIncident.cause}
-                </div>
-                <div className="text-xs text-slate-400 flex flex-wrap items-center gap-3 pt-0.5">
-                  <span>
-                    Started: {new Date(activeIncident.startedAt).toLocaleString()}
-                  </span>
-                  <span>•</span>
-                  <span>Downtime Duration: {formatDuration(elapsed)}</span>
-                  <span>•</span>
-                  <span>Triggered by 3 consecutive check failures</span>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Top Header Card */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                {monitor.name}
-              </h1>
-
-              <Badge
-                variant={monitor.isPaused ? 'warning' : 'success'}
-                className="text-xs uppercase font-bold"
-              >
-                {monitor.isPaused ? 'Paused' : 'Active'}
-              </Badge>
-
-              {latestCheck ? (
-                <Badge
-                  variant={latestCheck.isSuccess ? 'success' : 'destructive'}
-                  className="text-xs font-bold flex items-center gap-1"
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      latestCheck.isSuccess ? 'bg-emerald-400' : 'bg-red-400'
-                    }`}
-                  />
-                  <span>
-                    {latestCheck.isSuccess
-                      ? `Passing • ${latestCheck.statusCode} OK`
-                      : `Failing • ${latestCheck.statusCode ?? 'ERR'}`}
-                  </span>
-                </Badge>
-              ) : (
-                <Badge
-                  variant="outline"
-                  className="text-xs text-slate-400 border-slate-700"
-                >
-                  Never Checked
-                </Badge>
-              )}
-
-              {monitor.isSeeded && (
-                <Badge
-                  variant="outline"
-                  className="text-xs border-amber-500/40 text-amber-400 bg-amber-500/10 font-medium"
-                >
-                  Demo data — simulated history
-                </Badge>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 text-sm text-slate-400 font-mono">
-              <Globe className="h-4 w-4 text-slate-500 shrink-0" />
-              <span className="truncate max-w-md sm:max-w-xl text-slate-300">
-                {monitor.url}
-              </span>
-              <a
-                href={monitor.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-slate-500 hover:text-slate-300"
-              >
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleTriggerCheck}
-              disabled={isRunningCheck || monitor.isPaused}
-              className="gap-1.5 text-xs h-9 bg-blue-600 hover:bg-blue-500 text-white shadow-xs"
-            >
-              {isRunningCheck ? (
-                <>
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  <span>Checking...</span>
-                </>
-              ) : (
-                <>
-                  <Zap className="h-3.5 w-3.5" />
-                  <span>Run Check Now</span>
-                </>
-              )}
-            </Button>
-
-            <Button
-              variant={monitor.isPaused ? 'outline' : 'secondary'}
-              size="sm"
-              onClick={handleTogglePause}
-              disabled={isToggling}
-              className="gap-1.5 text-xs h-9"
-            >
-              {monitor.isPaused ? (
-                <>
-                  <Play className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>Resume</span>
-                </>
-              ) : (
-                <>
-                  <Pause className="h-3.5 w-3.5 text-amber-400" />
-                  <span>Pause</span>
-                </>
-              )}
-            </Button>
-
-            <Link href={`/monitors/${monitor.id}/edit`}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-xs h-9 border-slate-700"
-              >
-                <Edit className="h-3.5 w-3.5" />
-                <span>Edit</span>
-              </Button>
-            </Link>
-
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setShowDeleteDialog(true)}
-              className="gap-1.5 text-xs h-9 bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white border border-red-500/30"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span>Delete</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* Configuration Details Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="border-slate-800 bg-slate-900/40">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-medium text-slate-400">
-                HTTP Method
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold text-white font-mono">
-                {monitor.method}
-              </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                Outbound request method
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-800 bg-slate-900/40">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-medium text-slate-400">
-                Check Cadence
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold text-white font-mono">
-                {monitor.intervalSeconds}s
-              </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                Scheduled BullMQ interval
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-800 bg-slate-900/40">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-medium text-slate-400">
-                Network Timeout
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold text-white font-mono">
-                {monitor.timeoutMs / 1000}s
-              </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                {monitor.timeoutMs}ms safety limit
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-800 bg-slate-900/40">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-medium text-slate-400">
-                Expected Status
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold text-emerald-400 font-mono">
-                {monitor.expectedStatus}
-              </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                Target HTTP response code
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Phase 5 Metrics, Analytics & Interactive Charts */}
-        <Card className="border-slate-800 bg-slate-900/60 shadow-lg">
-          <CardHeader className="pb-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <CardTitle className="text-lg text-white">
-                    Historical Performance & Availability
-                  </CardTitle>
-                  <Badge
-                    variant="outline"
-                    className="border-blue-500/30 text-blue-400 bg-blue-500/10 text-xs"
-                  >
-                    Telemetry Analytics
-                  </Badge>
-                  {stats?.isDemo && (
-                    <Badge
-                      variant="outline"
-                      className="border-amber-500/30 text-amber-400 bg-amber-500/10 text-xs"
-                    >
-                      Simulated History
-                    </Badge>
-                  )}
-                </div>
-                <CardDescription className="text-slate-400 mt-0.5">
-                  Nearest-rank latency percentiles, aggregate uptime telemetry, and time-series history
-                  {stats?.isDemo && (
-                    <span className="block text-amber-400/90 text-[11px] mt-0.5 font-medium">
-                      • Demo mode: Displaying simulated 30-day telemetry for showcase.
-                    </span>
-                  )}
-                </CardDescription>
-              </div>
-
-              {/* Time Window Selector */}
-              <div className="inline-flex rounded-lg border border-slate-800 bg-slate-950 p-1 self-start sm:self-auto">
-                {(['24h', '7d', '30d'] as const).map((win) => (
-                  <button
-                    key={win}
-                    type="button"
-                    onClick={() => setStatsWindow(win)}
-                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                      statsWindow === win
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {win === '24h'
-                      ? '24 Hours'
-                      : win === '7d'
-                        ? '7 Days'
-                        : '30 Days'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </CardHeader>
-
-          <CardContent className="space-y-6">
-            {/* Summary Metric Cards for Selected Window */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              {/* Uptime */}
-              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70">
-                <div className="text-[11px] font-medium text-slate-400">
-                  Uptime ({statsWindow})
-                </div>
-                <div className="text-xl font-bold font-mono mt-1">
-                  {stats?.uptimePercent !== null &&
-                  stats?.uptimePercent !== undefined ? (
-                    <span
-                      className={
-                        stats.uptimePercent >= 99
-                          ? 'text-emerald-400'
-                          : stats.uptimePercent >= 90
-                            ? 'text-amber-400'
-                            : 'text-red-400'
-                      }
-                    >
-                      {stats.uptimePercent}%
-                    </span>
-                  ) : (
-                    <span className="text-xs font-normal text-slate-500">
-                      No data yet
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Avg Latency */}
-              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70">
-                <div className="text-[11px] font-medium text-slate-400">
-                  Avg Latency
-                </div>
-                <div className="text-xl font-bold font-mono text-white mt-1">
-                  {stats?.avgLatencyMs !== null &&
-                  stats?.avgLatencyMs !== undefined ? (
-                    <span>
-                      {stats.avgLatencyMs}
-                      <span className="text-xs text-slate-500 font-normal ml-0.5">
-                        ms
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="text-xs font-normal text-slate-500">
-                      No data yet
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* p50 */}
-              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70">
-                <div className="text-[11px] font-medium text-slate-400">
-                  p50 Latency
-                </div>
-                <div className="text-xl font-bold font-mono text-slate-200 mt-1">
-                  {stats?.p50LatencyMs !== null &&
-                  stats?.p50LatencyMs !== undefined ? (
-                    <span>
-                      {stats.p50LatencyMs}
-                      <span className="text-xs text-slate-500 font-normal ml-0.5">
-                        ms
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="text-xs font-normal text-slate-500">
-                      No data yet
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* p95 */}
-              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70">
-                <div className="text-[11px] font-medium text-slate-400">
-                  p95 Latency
-                </div>
-                <div className="text-xl font-bold font-mono text-amber-300 mt-1">
-                  {stats?.p95LatencyMs !== null &&
-                  stats?.p95LatencyMs !== undefined ? (
-                    <span>
-                      {stats.p95LatencyMs}
-                      <span className="text-xs text-slate-500 font-normal ml-0.5">
-                        ms
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="text-xs font-normal text-slate-500">
-                      No data yet
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* p99 */}
-              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70">
-                <div className="text-[11px] font-medium text-slate-400">
-                  p99 Latency
-                </div>
-                <div className="text-xl font-bold font-mono text-red-300 mt-1">
-                  {stats?.p99LatencyMs !== null &&
-                  stats?.p99LatencyMs !== undefined ? (
-                    <span>
-                      {stats.p99LatencyMs}
-                      <span className="text-xs text-slate-500 font-normal ml-0.5">
-                        ms
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="text-xs font-normal text-slate-500">
-                      No data yet
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Total Checks */}
-              <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/70">
-                <div className="text-[11px] font-medium text-slate-400">
-                  Total Checks
-                </div>
-                <div className="text-xl font-bold font-mono text-white mt-1">
-                  {stats?.totalChecks ?? 0}
-                </div>
-                <div className="text-[10px] text-slate-500 mt-0.5 truncate">
-                  {stats
-                    ? `${stats.successfulChecks} pass, ${stats.failedChecks} fail`
-                    : '0 pass, 0 fail'}
-                </div>
-              </div>
-            </div>
-
-            {/* Availability Timeline (UptimeBar) */}
-            <div className="space-y-2 pt-2">
-              <div className="text-xs font-semibold text-slate-300">
-                Availability History (
-                {statsWindow === '24h'
-                  ? '24 Hours'
-                  : statsWindow === '7d'
-                    ? '7 Days'
-                    : '30 Days'}
-                )
-              </div>
-              <UptimeBar series={stats?.series || []} isLoading={statsLoading} />
-            </div>
-
-            {/* Latency Trend Line Chart */}
-            <div className="space-y-2 pt-2">
-              <div className="text-xs font-semibold text-slate-300">
-                Response Latency Trend (
-                {statsWindow === '24h' ? 'Hourly' : 'Daily'} Average)
-              </div>
-              <LatencyChart
-                series={stats?.series || []}
-                isLoading={statsLoading}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Live Execution Telemetry Card */}
-        <Card className="border-slate-800 bg-slate-900/50 shadow-md">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-lg text-white">
-                  Execution Telemetry
-                </CardTitle>
-                <CardDescription className="text-slate-400">
-                  Real-time health check outcomes, response latency, and SSRF verification
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fetchChecks(monitor.id)}
-                  className="h-8 gap-1.5 text-xs border-slate-700 text-slate-300"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                  <span>Refresh</span>
-                </Button>
-                <Badge
-                  variant="outline"
-                  className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 text-xs"
-                >
-                  Phase 3 Active
-                </Badge>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {latestCheck ? (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-xl border border-slate-800 bg-slate-950/60">
-                <div>
-                  <div className="text-xs text-slate-500 font-medium">Last HTTP Status</div>
-                  <div className="text-2xl font-bold mt-1 font-mono flex items-center gap-2">
-                    <span
-                      className={
-                        latestCheck.isSuccess ? 'text-emerald-400' : 'text-red-400'
-                      }
-                    >
-                      {latestCheck.statusCode ?? 'Error'}
-                    </span>
-                    <Badge
-                      variant={latestCheck.isSuccess ? 'success' : 'destructive'}
-                      className="text-[11px] font-bold"
-                    >
-                      {latestCheck.isSuccess ? 'PASSING' : 'FAILING'}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-xs text-slate-500 font-medium">Response Latency</div>
-                  <div className="text-2xl font-bold text-white mt-1 font-mono">
-                    {latestCheck.latencyMs}
-                    <span className="text-sm font-normal text-slate-400 ml-1">ms</span>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-xs text-slate-500 font-medium">Last Executed</div>
-                  <div className="text-sm font-medium text-slate-200 mt-2">
-                    {new Date(latestCheck.checkedAt).toLocaleString()}
-                  </div>
-                </div>
-
-                {latestCheck.errorMessage && (
-                  <div className="col-span-1 sm:col-span-3 pt-3 border-t border-slate-800/80">
-                    <div className="text-xs font-semibold text-red-400 mb-1">
-                      Check Error Diagnostics:
-                    </div>
-                    <div className="text-xs font-mono text-red-300 bg-red-950/30 border border-red-900/50 p-2.5 rounded-lg break-all">
-                      {latestCheck.errorMessage}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/60 p-8 text-center space-y-3">
-                <div className="h-12 w-12 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center mx-auto text-blue-400">
-                  <Clock className="h-6 w-6" />
-                </div>
-                <div className="space-y-1">
-                  <h4 className="font-semibold text-white">No Check Results Recorded Yet</h4>
-                  <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
-                    This monitor has not executed any health checks yet. Click &quot;Run Check Now&quot; above to trigger an immediate check or wait for the BullMQ scheduled cadence.
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  onClick={handleTriggerCheck}
-                  disabled={isRunningCheck || monitor.isPaused}
-                  className="gap-2 text-xs"
-                >
-                  <Zap className="h-3.5 w-3.5" />
-                  <span>Execute First Check</span>
-                </Button>
-              </div>
-            )}
-
-            {/* Recent Checks History Table */}
-            <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-white flex items-center justify-between">
-                <span>Recent Checks History</span>
-                <span className="text-xs font-normal text-slate-400">
-                  Showing last {recentChecks.length} records
-                </span>
-              </h4>
-
-              {recentChecks.length === 0 ? (
-                <p className="text-xs text-slate-500 italic">No historical checks found.</p>
-              ) : (
-                <div className="border border-slate-800 rounded-lg overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-left">
-                      <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 font-medium">
-                        <tr>
-                          <th className="py-2.5 px-3">Timestamp</th>
-                          <th className="py-2.5 px-3">Status</th>
-                          <th className="py-2.5 px-3">Latency</th>
-                          <th className="py-2.5 px-3">Outcome</th>
-                          <th className="py-2.5 px-3">Details</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/60">
-                        {recentChecks.map((chk) => (
-                          <tr key={chk.id} className="hover:bg-slate-900/30">
-                            <td className="py-2.5 px-3 font-mono text-slate-300">
-                              {new Date(chk.checkedAt).toLocaleTimeString()} (
-                              {new Date(chk.checkedAt).toLocaleDateString()})
-                            </td>
-                            <td className="py-2.5 px-3 font-mono">
-                              {chk.statusCode ? (
-                                <span
-                                  className={
-                                    chk.isSuccess ? 'text-emerald-400' : 'text-red-400'
-                                  }
-                                >
-                                  {chk.statusCode}
-                                </span>
-                              ) : (
-                                <span className="text-red-400">Failed</span>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 font-mono text-slate-300">
-                              {chk.latencyMs}ms
-                            </td>
-                            <td className="py-2.5 px-3">
-                              <Badge
-                                variant={chk.isSuccess ? 'success' : 'destructive'}
-                                className="text-[10px] py-0 px-2 uppercase font-bold"
-                              >
-                                {chk.isSuccess ? 'Pass' : 'Fail'}
-                              </Badge>
-                            </td>
-                            <td className="py-2.5 px-3 text-slate-400 truncate max-w-xs font-mono text-[11px]">
-                              {chk.errorMessage || 'Expected status matched'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-slate-400 pt-3 border-t border-slate-800/80">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-slate-500" />
-                <span>Created: {new Date(monitor.createdAt).toLocaleString()}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Layers className="h-4 w-4 text-slate-500" />
-                <span>Last Updated: {new Date(monitor.updatedAt).toLocaleString()}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Incident History Table */}
-        <Card className="border-slate-800 bg-slate-900/50 shadow-md">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-lg text-white">Incident History</CardTitle>
-                <CardDescription className="text-slate-400">
-                  Automated incident lifecycle tracking and outage duration logs
-                </CardDescription>
-              </div>
-              <Badge
-                variant="outline"
-                className="border-slate-700 text-slate-300 text-xs"
-              >
-                {incidents.length} {incidents.length === 1 ? 'Incident' : 'Incidents'}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {incidents.length === 0 ? (
-              <div className="text-center py-8 space-y-2">
-                <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto" />
-                <div className="text-sm font-medium text-white">No incidents recorded</div>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                  This monitor has not breached the 3-consecutive-failure threshold. All outages are automatically tracked and resolved here.
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5 font-mono">
+                  <span className="text-[var(--text-muted)]">Failure reason: </span>
+                  {activeIncidents[0].cause} • Started {timeAgo(activeIncidents[0].startedAt)}
                 </p>
               </div>
-            ) : (
-              <div className="border border-slate-800 rounded-lg overflow-hidden">
+            </div>
+            <Link href="/incidents">
+              <Button size="sm" variant="destructive" className="text-xs font-mono">
+                View Incident Command
+              </Button>
+            </Link>
+          </div>
+        )}
+
+        {/* Metric Strip with Time Window Selector */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-xs font-mono font-medium text-[var(--text-muted)] uppercase tracking-wider">
+              TELEMETRY WINDOW
+            </span>
+            <div className="flex items-center gap-1 border border-[var(--border)] rounded-[4px] p-0.5 bg-[var(--surface)]">
+              {(['24h', '7d', '30d'] as StatsWindow[]).map((w) => (
+                <button
+                  key={w}
+                  onClick={() => setStatsWindow(w)}
+                  disabled={statsLoading}
+                  className={`px-2.5 py-1 text-xs font-mono rounded-[2px] transition-colors ${
+                    statsWindow === w
+                      ? 'bg-[var(--surface-active)] text-[var(--text-primary)] font-semibold shadow-xs'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  {w}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Metric Tiles: Uptime, Avg Latency, p50, p95, p99, Checks */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {/* Uptime % */}
+            <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface)] p-3.5 space-y-1">
+              <div className="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
+                UPTIME ({statsWindow})
+              </div>
+              <div className="text-xl font-bold font-mono tabular-nums text-[var(--text-primary)]">
+                {stats?.uptimePercent !== null && stats?.uptimePercent !== undefined ? (
+                  <span>{stats.uptimePercent}%</span>
+                ) : (
+                  <span className="text-sm font-normal text-[var(--text-muted)]">—</span>
+                )}
+              </div>
+            </div>
+
+            {/* Avg Latency */}
+            <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface)] p-3.5 space-y-1">
+              <div className="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
+                AVG LATENCY
+              </div>
+              <div className="text-xl font-bold font-mono tabular-nums text-[var(--text-primary)]">
+                {stats?.avgLatencyMs !== null && stats?.avgLatencyMs !== undefined ? (
+                  `${stats.avgLatencyMs}ms`
+                ) : (
+                  <span className="text-sm font-normal text-[var(--text-muted)]">—</span>
+                )}
+              </div>
+            </div>
+
+            {/* p50 Latency */}
+            <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface)] p-3.5 space-y-1">
+              <div className="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
+                p50 LATENCY
+              </div>
+              <div className="text-xl font-bold font-mono tabular-nums text-[var(--text-primary)]">
+                {stats?.p50LatencyMs !== null && stats?.p50LatencyMs !== undefined ? (
+                  `${stats.p50LatencyMs}ms`
+                ) : (
+                  <span className="text-sm font-normal text-[var(--text-muted)]">—</span>
+                )}
+              </div>
+            </div>
+
+            {/* p95 Tail Latency */}
+            <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface)] p-3.5 space-y-1">
+              <div className="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-wider flex items-center justify-between">
+                <span>p95 TAIL</span>
+                <span className="text-[9px] text-[var(--text-dim)]">DIAGNOSTIC</span>
+              </div>
+              <div className="text-xl font-bold font-mono tabular-nums text-[var(--text-primary)]">
+                {stats?.p95LatencyMs !== null && stats?.p95LatencyMs !== undefined ? (
+                  `${stats.p95LatencyMs}ms`
+                ) : (
+                  <span className="text-sm font-normal text-[var(--text-muted)]">—</span>
+                )}
+              </div>
+            </div>
+
+            {/* p99 Outlier Latency */}
+            <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface)] p-3.5 space-y-1">
+              <div className="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-wider flex items-center justify-between">
+                <span>p99 OUTLIER</span>
+                <span className="text-[9px] text-[var(--text-dim)]">DIAGNOSTIC</span>
+              </div>
+              <div className="text-xl font-bold font-mono tabular-nums text-[var(--text-primary)]">
+                {stats?.p99LatencyMs !== null && stats?.p99LatencyMs !== undefined ? (
+                  `${stats.p99LatencyMs}ms`
+                ) : (
+                  <span className="text-sm font-normal text-[var(--text-muted)]">—</span>
+                )}
+              </div>
+            </div>
+
+            {/* Total Checks */}
+            <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface)] p-3.5 space-y-1">
+              <div className="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
+                CHECKS RUN
+              </div>
+              <div className="text-xl font-bold font-mono tabular-nums text-[var(--text-primary)]">
+                {stats?.totalChecks ?? 0}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Visualizations: Uptime Bar & Latency Trend */}
+        <div className="space-y-4">
+          {/* Uptime History Bar */}
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-mono">Uptime Timeline</CardTitle>
+                <span className="text-[11px] font-mono text-[var(--text-muted)]">
+                  Bucket view ({statsWindow})
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {stats?.series && stats.series.length > 0 ? (
+                <UptimeBar series={stats.series} isLoading={statsLoading} />
+              ) : (
+                <div className="py-6 text-center text-xs text-[var(--text-muted)] font-mono">
+                  No check history recorded in this window.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Average Latency Chart */}
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm font-mono">Average Response Latency</CardTitle>
+                  <CardDescription className="text-xs">
+                    Bucket average latency series across {statsWindow}. Percentiles (p50/p95/p99) reported in diagnostic summary above.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {stats?.series ? (
+                <LatencyChart series={stats.series} isLoading={statsLoading} />
+              ) : (
+                <div className="py-12 text-center text-xs text-[var(--text-muted)] font-mono">
+                  No latency series available.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Operational Log Tables: Check History & Incident History */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Check History Table */}
+          <Card className="p-0 overflow-hidden">
+            <div className="p-4 border-b border-[var(--border)] flex items-center justify-between bg-[var(--surface-subtle)]">
+              <div>
+                <h3 className="font-semibold text-sm text-[var(--text-primary)] font-mono">
+                  Recent Check Log
+                </h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Last {recentChecks.length} health check executions.
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => fetchChecks(monitor.id)}
+                className="h-7 px-2 text-xs font-mono text-[var(--text-secondary)]"
+                title="Refresh check history"
+              >
+                <RefreshCw className="h-3 w-3" />
+              </Button>
+            </div>
+            <CardContent className="p-0">
+              {recentChecks.length === 0 ? (
+                <div className="py-10 text-center text-xs text-[var(--text-muted)] font-mono">
+                  No checks executed yet. Click &quot;Check Now&quot; to test.
+                </div>
+              ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 font-medium">
-                      <tr>
-                        <th className="py-2.5 px-3">Status</th>
-                        <th className="py-2.5 px-3">Failure Cause</th>
-                        <th className="py-2.5 px-3">Started At</th>
-                        <th className="py-2.5 px-3">Resolved At</th>
-                        <th className="py-2.5 px-3">Duration</th>
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-[var(--border)] text-[var(--text-muted)] font-mono text-[11px] bg-[var(--surface-subtle)]">
+                        <th className="py-2 px-3 font-medium">TIME</th>
+                        <th className="py-2 px-3 font-medium">RESULT</th>
+                        <th className="py-2 px-3 font-medium">HTTP</th>
+                        <th className="py-2 px-3 font-medium">LATENCY</th>
+                        <th className="py-2 px-3 font-medium">DETAILS</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60">
-                      {incidents.map((inc) => {
-                        const isOngoing = !inc.isResolved;
-                        const elapsed = isOngoing
-                          ? Math.max(0, Math.floor((Date.now() - new Date(inc.startedAt).getTime()) / 1000))
-                          : inc.durationSeconds;
-
-                        return (
-                          <tr key={inc.id} className="hover:bg-slate-900/30">
-                            <td className="py-2.5 px-3">
-                              {isOngoing ? (
-                                <Badge
-                                  variant="destructive"
-                                  className="text-[9px] uppercase font-bold px-1.5 py-0 bg-red-950 text-red-400 border border-red-800/60"
-                                >
-                                  Ongoing
-                                </Badge>
-                              ) : (
-                                <Badge
-                                  variant="outline"
-                                  className="text-[9px] uppercase font-bold px-1.5 py-0 border-emerald-500/30 text-emerald-400"
-                                >
-                                  Resolved
-                                </Badge>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 font-mono text-slate-300 max-w-xs truncate">
-                              {inc.cause}
-                            </td>
-                            <td className="py-2.5 px-3 text-slate-400">
-                              {new Date(inc.startedAt).toLocaleString()}
-                            </td>
-                            <td className="py-2.5 px-3 text-slate-400">
-                              {inc.resolvedAt
-                                ? new Date(inc.resolvedAt).toLocaleString()
-                                : 'Ongoing Outage'}
-                            </td>
-                            <td className="py-2.5 px-3 font-medium">
-                              <span className={isOngoing ? 'text-red-400' : 'text-slate-300'}>
-                                {formatDuration(elapsed)}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                    <tbody className="divide-y divide-[var(--border)] font-mono">
+                      {recentChecks.map((chk) => (
+                        <tr
+                          key={chk.id}
+                          className={`hover:bg-[var(--surface-hover)] transition-colors ${
+                            !chk.isSuccess ? 'bg-[var(--status-down-bg)]/10' : ''
+                          }`}
+                        >
+                          <td className="py-2 px-3 whitespace-nowrap text-[var(--text-secondary)] text-[11px] tabular-nums">
+                            {timeAgo(chk.checkedAt)}
+                          </td>
+                          <td className="py-2 px-3 whitespace-nowrap">
+                            <Badge
+                              variant={chk.isSuccess ? 'healthy' : 'down'}
+                              className="text-[10px] font-mono px-1 py-0 tabular-nums"
+                            >
+                              {chk.isSuccess ? 'PASS' : 'FAIL'}
+                            </Badge>
+                          </td>
+                          <td className="py-2 px-3 whitespace-nowrap tabular-nums text-[var(--text-primary)]">
+                            {chk.statusCode ?? 'ERR'}
+                          </td>
+                          <td className="py-2 px-3 whitespace-nowrap tabular-nums text-[var(--text-secondary)]">
+                            {chk.latencyMs}ms
+                          </td>
+                          <td className="py-2 px-3 text-[11px] text-[var(--text-muted)] truncate max-w-[150px]">
+                            {chk.errorMessage || (chk.isSuccess ? 'Expected status matched' : 'Check failed')}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Incident History Table */}
+          <Card className="p-0 overflow-hidden">
+            <div className="p-4 border-b border-[var(--border)] flex items-center justify-between bg-[var(--surface-subtle)]">
+              <div>
+                <h3 className="font-semibold text-sm text-[var(--text-primary)] font-mono">
+                  Incident Log
+                </h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Outage and automated recovery events.
+                </p>
               </div>
-            )}
-          </CardContent>
-        </Card>
+              <Link href="/incidents">
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs font-mono text-[var(--text-secondary)]">
+                  All Incidents &rarr;
+                </Button>
+              </Link>
+            </div>
+            <CardContent className="p-0">
+              {incidents.length === 0 ? (
+                <div className="py-10 text-center text-xs text-[var(--text-muted)] font-mono">
+                  Zero incidents recorded for this monitor.
+                </div>
+              ) : (
+                <div className="divide-y divide-[var(--border)]">
+                  {incidents.map((inc) => {
+                    const isOngoing = !inc.isResolved;
+                    const elapsed = isOngoing
+                      ? Math.max(0, Math.floor((Date.now() - new Date(inc.startedAt).getTime()) / 1000))
+                      : inc.durationSeconds;
+
+                    return (
+                      <div
+                        key={inc.id}
+                        className={`p-3.5 flex items-start justify-between gap-3 ${
+                          isOngoing ? 'bg-[var(--status-down-bg)]/15' : 'hover:bg-[var(--surface-hover)]'
+                        }`}
+                      >
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={isOngoing ? 'down' : 'healthy'}
+                              className="text-[9px] font-mono px-1 py-0"
+                            >
+                              {isOngoing ? 'ONGOING' : 'RESOLVED'}
+                            </Badge>
+                            <span className="font-mono text-xs text-[var(--text-primary)] font-medium">
+                              {timeAgo(inc.startedAt)}
+                            </span>
+                          </div>
+                          <p className="text-xs font-mono text-[var(--text-muted)] truncate max-w-sm">
+                            <span className="text-[var(--text-dim)]">Failure reason: </span>
+                            {inc.cause}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div
+                            className={`font-mono text-xs tabular-nums font-semibold ${
+                              isOngoing ? 'text-[var(--status-down)]' : 'text-[var(--text-secondary)]'
+                            }`}
+                          >
+                            {formatDuration(elapsed)}
+                          </div>
+                          <div className="text-[10px] text-[var(--text-muted)] font-mono">
+                            {isOngoing ? 'downtime' : 'duration'}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </main>
 
       {/* Delete Confirmation Modal */}
       <ConfirmDialog
         isOpen={showDeleteDialog}
         title="Delete Monitor"
-        description={`Are you sure you want to delete "${monitor.name}"? All associated check results and configuration will be permanently deleted. This action cannot be undone.`}
+        description={`Permanently delete "${monitor.name}"? This removes the monitor schedule and deletes all historical health checks and incident logs.`}
         confirmText="Delete Monitor"
-        cancelText="Cancel"
         isDestructive={true}
         isLoading={isDeleting}
         onConfirm={handleDelete}

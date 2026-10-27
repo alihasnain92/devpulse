@@ -39,26 +39,26 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 
   const data = payload[0].payload;
   return (
-    <div className="rounded-lg border border-slate-700 bg-slate-900/95 p-3 text-xs shadow-xl backdrop-blur-xs">
-      <div className="font-semibold text-slate-200 border-b border-slate-800 pb-1.5 mb-1.5">
+    <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface)] p-2.5 text-xs shadow-md">
+      <div className="font-semibold text-[var(--text-primary)] border-b border-[var(--border)] pb-1 mb-1.5 font-mono">
         {data.label}
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1 font-mono text-xs">
         <div className="flex items-center justify-between gap-4">
-          <span className="text-slate-400">Avg Latency:</span>
-          <span className="font-mono font-bold text-blue-400">
+          <span className="text-[var(--text-secondary)] font-sans">Avg Latency:</span>
+          <span className="font-bold text-[var(--primary)] tabular-nums">
             {data.latency !== null ? `${data.latency}ms` : 'No data'}
           </span>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <span className="text-slate-400">Uptime:</span>
-          <span className="font-mono font-medium text-emerald-400">
+          <span className="text-[var(--text-secondary)] font-sans">Uptime:</span>
+          <span className="font-medium text-[var(--status-healthy)] tabular-nums">
             {data.uptime !== null ? `${data.uptime}%` : 'N/A'}
           </span>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <span className="text-slate-400">Checks:</span>
-          <span className="font-mono text-slate-300">{data.checks}</span>
+          <span className="text-[var(--text-secondary)] font-sans">Checks:</span>
+          <span className="text-[var(--text-primary)] tabular-nums">{data.checks}</span>
         </div>
       </div>
     </div>
@@ -68,9 +68,9 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 export function LatencyChart({ series, isLoading }: LatencyChartProps) {
   if (isLoading) {
     return (
-      <div className="w-full h-64 flex items-center justify-center rounded-xl border border-slate-800 bg-slate-900/40">
-        <div className="flex items-center gap-2 text-xs text-slate-400">
-          <Activity className="h-4 w-4 animate-spin text-blue-400" />
+      <div className="w-full h-64 flex items-center justify-center rounded-[6px] border border-[var(--border)] bg-[var(--surface-subtle)]">
+        <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+          <Activity className="h-4 w-4 animate-spin text-[var(--primary)]" />
           <span>Loading telemetry series...</span>
         </div>
       </div>
@@ -81,15 +81,12 @@ export function LatencyChart({ series, isLoading }: LatencyChartProps) {
 
   if (!hasData) {
     return (
-      <div className="w-full h-64 flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-800 bg-slate-900/20 text-center p-6 space-y-2">
-        <div className="h-10 w-10 rounded-lg bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-          <Activity className="h-5 w-5" />
+      <div className="w-full h-64 flex flex-col items-center justify-center rounded-[6px] border border-dashed border-[var(--border)] bg-[var(--surface-subtle)] text-center p-6 space-y-2">
+        <div className="text-sm font-semibold text-[var(--text-secondary)]">
+          No Latency Data Recorded
         </div>
-        <div className="text-sm font-semibold text-slate-300">
-          No Latency Data Yet
-        </div>
-        <p className="text-xs text-slate-500 max-w-sm">
-          No successful health checks recorded in this time window. Once checks are executed, response time latency will plot automatically.
+        <p className="text-xs text-[var(--text-muted)] max-w-sm">
+          No successful health checks recorded in this time window. Once checks are executed, average response latency will plot automatically.
         </p>
       </div>
     );
@@ -112,22 +109,22 @@ export function LatencyChart({ series, isLoading }: LatencyChartProps) {
         >
           <CartesianGrid
             strokeDasharray="3 3"
-            stroke="#1e293b"
+            stroke="var(--border)"
             vertical={false}
           />
           <XAxis
             dataKey="label"
-            stroke="#64748b"
+            stroke="var(--text-muted)"
             fontSize={11}
             tickLine={false}
-            axisLine={{ stroke: '#334155' }}
+            axisLine={{ stroke: 'var(--border)' }}
             interval="preserveStartEnd"
           />
           <YAxis
-            stroke="#64748b"
+            stroke="var(--text-muted)"
             fontSize={11}
             tickLine={false}
-            axisLine={{ stroke: '#334155' }}
+            axisLine={{ stroke: 'var(--border)' }}
             tickFormatter={(v) => `${v}ms`}
             domain={['auto', 'auto']}
           />
@@ -135,10 +132,10 @@ export function LatencyChart({ series, isLoading }: LatencyChartProps) {
           <Line
             type="monotone"
             dataKey="latency"
-            stroke="#3b82f6"
+            stroke="var(--primary)"
             strokeWidth={2}
-            dot={{ r: 2.5, fill: '#3b82f6' }}
-            activeDot={{ r: 5, fill: '#60a5fa' }}
+            dot={{ r: 2, fill: 'var(--primary)' }}
+            activeDot={{ r: 4, fill: 'var(--primary-hover)' }}
             connectNulls={false}
           />
         </LineChart>
