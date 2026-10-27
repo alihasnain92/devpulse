@@ -14,11 +14,13 @@ import { useAuth } from '@/lib/auth-context';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 import { Navbar } from '@/components/navbar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { OperationalPageHeader } from '@/components/ui/operational-page-header';
+import { StatusIndicator } from '@/components/ui/status-indicator';
 import {
   AlertCircle,
   AlertTriangle,
@@ -37,12 +39,22 @@ import {
 import { DeliveriesTab } from './deliveries-tab';
 import { NotificationsTab } from './notifications-tab';
 
+const API_KEY_SCOPE_DESCRIPTIONS: Record<ApiKeyScope, string> = {
+  'monitors:read': 'View monitors, status, and health metrics',
+  'monitors:write': 'Create, edit, pause, and delete monitors',
+  'incidents:read': 'Access incident history, outages, and timeline',
+  'webhooks:read': 'View configured webhook endpoints and delivery logs',
+  'webhooks:write': 'Create, update, test, and manage webhook endpoints',
+  'notifications:read': 'View alert notification history and channels',
+  'notifications:write': 'Update notification preferences and email alerts',
+};
+
 export default function SettingsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
 
   const [activeTab, setActiveTab] = React.useState<
-    'webhooks' | 'deliveries' | 'apikeys' | 'notifications'
+    'webhooks' | 'deliveries' | 'notifications' | 'apikeys'
   >('webhooks');
 
   // Webhooks State
@@ -158,7 +170,7 @@ export default function SettingsPage() {
   async function handleCreateWebhook(e: React.FormEvent) {
     e.preventDefault();
     if (!newWebhookName.trim() || !newWebhookUrl.trim() || newWebhookEvents.length === 0) {
-      setCreateWebhookError('Please fill in all required fields and select at least one event.');
+      setCreateWebhookError('Please provide a name, destination URL, and at least one event subscription.');
       return;
     }
 
@@ -178,7 +190,7 @@ export default function SettingsPage() {
       setNewWebhookDescription('');
       setNewWebhookEvents(['incident.created', 'incident.resolved']);
 
-      // Show secret modal once
+      // Show revealed secret modal once
       setRevealedSecret({
         name: res.endpoint.name,
         secret: res.signingSecret,
@@ -187,20 +199,20 @@ export default function SettingsPage() {
       await loadWebhooks();
     } catch (err) {
       setCreateWebhookError(
-        err instanceof ApiClientError ? err.message : 'Failed to register webhook endpoint',
+        err instanceof ApiClientError ? err.message : 'Failed to register webhook',
       );
     } finally {
       setCreatingWebhook(false);
     }
   }
 
-  function openEditWebhook(wh: WebhookEndpointDto) {
-    setEditingWebhook(wh);
-    setEditName(wh.name);
-    setEditUrl(wh.url);
-    setEditDescription(wh.description || '');
-    setEditEvents([...wh.events]);
-    setEditEnabled(wh.isEnabled);
+  function openEditWebhook(webhook: WebhookEndpointDto) {
+    setEditingWebhook(webhook);
+    setEditName(webhook.name);
+    setEditUrl(webhook.url);
+    setEditDescription(webhook.description || '');
+    setEditEvents([...webhook.events]);
+    setEditEnabled(webhook.isEnabled);
   }
 
   async function handleUpdateWebhook(e: React.FormEvent) {
@@ -245,7 +257,7 @@ export default function SettingsPage() {
   async function handleCreateKey(e: React.FormEvent) {
     e.preventDefault();
     if (!newKeyName.trim() || newKeyScopes.length === 0) {
-      setCreateKeyError('Please provide a name and select at least one scope.');
+      setCreateKeyError('Please provide a friendly name and select at least one scope.');
       return;
     }
 
@@ -294,206 +306,194 @@ export default function SettingsPage() {
 
   if (authLoading || !user) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
-        <RefreshCw className="h-6 w-6 animate-spin" />
+      <div className="min-h-screen bg-[var(--background)] flex items-center justify-center text-[var(--text-muted)]">
+        <RefreshCw className="h-6 w-6 animate-spin text-[var(--primary)]" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] flex flex-col font-sans">
       <Navbar />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800 pb-6">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-              Settings & Developer Integrations
-            </h1>
-            <p className="text-slate-400 text-sm mt-1">
-              Configure automated webhook notifications and programmatic REST API access tokens.
-            </p>
-          </div>
-        </div>
+        <OperationalPageHeader
+          eyebrow="Configuration & Integrations"
+          title="Settings"
+          description="Manage webhook endpoints, inspect delivery histories, configure notification routing, and manage API keys."
+        />
 
-        {/* Tab Controls */}
-        <div className="flex border-b border-slate-800 gap-2">
+        {/* Tab Controls Navigation */}
+        <div className="flex border-b border-[var(--border)] overflow-x-auto gap-2">
           <button
             onClick={() => setActiveTab('webhooks')}
-            className={`flex items-center gap-2 pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-2 pb-2.5 px-3 text-xs font-mono font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'webhooks'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-[var(--primary)] text-[var(--text-primary)] font-semibold'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            <Webhook className="h-4 w-4" />
+            <Webhook className="h-3.5 w-3.5" />
             <span>Webhooks</span>
-            <Badge variant="secondary" className="ml-1 text-xs">
+            <Badge variant="secondary" className="font-mono text-[10px] tabular-nums">
               {webhooks.length}
             </Badge>
           </button>
 
           <button
             onClick={() => setActiveTab('deliveries')}
-            className={`flex items-center gap-2 pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-2 pb-2.5 px-3 text-xs font-mono font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'deliveries'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-[var(--primary)] text-[var(--text-primary)] font-semibold'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            <History className="h-4 w-4" />
+            <History className="h-3.5 w-3.5" />
             <span>Deliveries</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('apikeys')}
-            className={`flex items-center gap-2 pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'apikeys'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+            onClick={() => setActiveTab('notifications')}
+            className={`flex items-center gap-2 pb-2.5 px-3 text-xs font-mono font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === 'notifications'
+                ? 'border-[var(--primary)] text-[var(--text-primary)] font-semibold'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            <Key className="h-4 w-4" />
-            <span>API Keys</span>
-            <Badge variant="secondary" className="ml-1 text-xs">
-              {apiKeys.length}
-            </Badge>
+            <Bell className="h-3.5 w-3.5" />
+            <span>Notifications</span>
           </button>
 
           <button
-            onClick={() => setActiveTab('notifications')}
-            className={`flex items-center gap-2 pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'notifications'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+            onClick={() => setActiveTab('apikeys')}
+            className={`flex items-center gap-2 pb-2.5 px-3 text-xs font-mono font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === 'apikeys'
+                ? 'border-[var(--primary)] text-[var(--text-primary)] font-semibold'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            <Bell className="h-4 w-4" />
-            <span>Notifications</span>
+            <Key className="h-3.5 w-3.5" />
+            <span>API Keys</span>
+            <Badge variant="secondary" className="font-mono text-[10px] tabular-nums">
+              {apiKeys.length}
+            </Badge>
           </button>
         </div>
 
         {/* TAB 1: WEBHOOKS */}
         {activeTab === 'webhooks' && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-white">Webhook Endpoints</h2>
-                <p className="text-xs text-slate-400">
+                <h2 className="text-base font-semibold font-mono text-[var(--text-primary)]">
+                  Webhook Endpoints
+                </h2>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
                   Receive cryptographically signed HTTP POST payloads when incidents occur or resolve.
                 </p>
               </div>
               <Button
+                size="sm"
                 onClick={() => setShowCreateWebhook(true)}
-                className="gap-2 bg-blue-600 hover:bg-blue-500 text-white"
+                className="gap-1.5 font-mono text-xs"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5" />
                 <span>Register Endpoint</span>
               </Button>
             </div>
 
             {webhookError && (
-              <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-4 flex items-center gap-3 text-red-300 text-sm">
-                <AlertCircle className="h-5 w-5 shrink-0 text-red-400" />
+              <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3.5 flex items-center gap-2.5 text-xs text-[var(--status-down)]">
+                <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{webhookError}</span>
               </div>
             )}
 
             {webhooksLoading ? (
-              <div className="py-12 flex justify-center text-slate-500">
-                <RefreshCw className="h-6 w-6 animate-spin" />
+              <div className="py-12 flex justify-center text-[var(--text-muted)]">
+                <RefreshCw className="h-5 w-5 animate-spin text-[var(--primary)]" />
               </div>
             ) : webhooks.length === 0 ? (
-              <Card className="border-slate-800 bg-slate-900/50 text-center py-12">
-                <CardContent className="space-y-3">
-                  <div className="mx-auto w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-400">
-                    <Webhook className="h-6 w-6" />
+              <Card className="border-dashed">
+                <CardContent className="py-16 text-center space-y-2 max-w-sm mx-auto">
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">
+                    No Webhook Endpoints Configured
                   </div>
-                  <h3 className="text-base font-semibold text-white">No Webhook Endpoints</h3>
-                  <p className="text-sm text-slate-400 max-w-sm mx-auto">
-                    Register your first endpoint to deliver real-time incident event payloads to PagerDuty, Slack, or your internal API.
+                  <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                    Register an endpoint to stream signed incident payloads to PagerDuty, Slack, or internal event receivers.
                   </p>
-                  <Button
-                    onClick={() => setShowCreateWebhook(true)}
-                    variant="outline"
-                    className="border-slate-700 text-slate-200 hover:bg-slate-800"
-                  >
-                    Register Webhook
-                  </Button>
+                  <div className="pt-2">
+                    <Button
+                      size="sm"
+                      onClick={() => setShowCreateWebhook(true)}
+                      className="font-mono text-xs gap-1.5"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Register Webhook</span>
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid gap-4">
+              <div className="rounded-[6px] border border-[var(--border)] bg-[var(--surface)] divide-y divide-[var(--border)]">
                 {webhooks.map((wh) => (
-                  <Card key={wh.id} className="border-slate-800 bg-slate-900/60 shadow-xs">
-                    <CardHeader className="pb-3 flex flex-row items-start justify-between">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-3">
-                          <CardTitle className="text-base text-white font-semibold">
-                            {wh.name}
-                          </CardTitle>
-                          <Badge
-                            variant={wh.isEnabled ? 'default' : 'secondary'}
-                            className={`text-xs ${
-                              wh.isEnabled
-                                ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
-                                : 'bg-slate-800 text-slate-400 border border-slate-700'
-                            }`}
-                          >
-                            {wh.isEnabled ? 'Active' : 'Disabled'}
-                          </Badge>
-                        </div>
-                        {wh.description && (
-                          <p className="text-xs text-slate-400 pt-0.5 line-clamp-2">
-                            {wh.description}
-                          </p>
-                        )}
-                        <div className="text-xs font-mono text-slate-400 break-all flex items-center gap-1.5 pt-0.5">
-                          <ExternalLink className="h-3 w-3 shrink-0 text-slate-500" />
-                          <span>{wh.url}</span>
-                        </div>
-                      </div>
-
+                  <div key={wh.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1 min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEditWebhook(wh)}
-                          className="text-xs text-slate-400 hover:text-white"
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeletingWebhookId(wh.id)}
-                          className="text-xs text-red-400 hover:text-red-300 hover:bg-red-950/30"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <span className="font-semibold text-xs text-[var(--text-primary)]">
+                          {wh.name}
+                        </span>
+                        <StatusIndicator
+                          status={wh.isEnabled ? 'healthy' : 'disabled'}
+                          variant="compact"
+                          label={wh.isEnabled ? 'Active' : 'Disabled'}
+                        />
                       </div>
-                    </CardHeader>
 
-                    <CardContent className="pt-0 border-t border-slate-800/60 mt-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-slate-500">Events:</span>
+                      {wh.description && (
+                        <p className="text-xs text-[var(--text-secondary)] line-clamp-1">
+                          {wh.description}
+                        </p>
+                      )}
+
+                      <div className="text-[11px] font-mono text-[var(--text-muted)] truncate flex items-center gap-1.5 select-all">
+                        <ExternalLink className="h-3 w-3 shrink-0 text-[var(--text-dim)]" />
+                        <span>{wh.url}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap pt-1">
+                        <span className="text-[10px] font-mono text-[var(--text-dim)]">Events:</span>
                         {wh.events.map((ev) => (
-                          <Badge
+                          <span
                             key={ev}
-                            variant="outline"
-                            className="bg-slate-800/80 text-blue-300 border-blue-500/20 text-xs"
+                            className="font-mono text-[10px] px-1.5 py-0.2 rounded-[2px] bg-[var(--surface-subtle)] text-[var(--primary)] border border-[var(--border-subtle)]"
                           >
                             {ev}
-                          </Badge>
+                          </span>
                         ))}
                       </div>
+                    </div>
 
-                      <div>
-                        Registered on {new Date(wh.createdAt).toLocaleDateString()}
-                      </div>
-                    </CardContent>
-                  </Card>
+                    <div className="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-[var(--border-subtle)]">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditWebhook(wh)}
+                        className="h-7 text-xs font-mono"
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDeletingWebhookId(wh.id)}
+                        className="h-7 text-xs font-mono text-[var(--status-down)] border-[var(--status-down)]/30 hover:bg-[var(--status-down-bg)]/20"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -505,113 +505,103 @@ export default function SettingsPage() {
           <DeliveriesTab webhooks={webhooks} />
         )}
 
-        {/* TAB 3: API KEYS */}
+        {/* TAB 3: NOTIFICATIONS */}
+        {activeTab === 'notifications' && (
+          <NotificationsTab />
+        )}
+
+        {/* TAB 4: API KEYS */}
         {activeTab === 'apikeys' && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-white">Personal API Keys</h2>
-                <p className="text-xs text-slate-400">
-                  Authenticate programmatic REST API calls using HTTP header <code className="text-blue-400">x-api-key: dp_live_...</code>.
+                <h2 className="text-base font-semibold font-mono text-[var(--text-primary)]">
+                  Personal API Keys
+                </h2>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  Authenticate programmatic REST API calls using header <code className="font-mono text-[var(--primary)]">x-api-key: dp_live_...</code>.
                 </p>
               </div>
               <Button
+                size="sm"
                 onClick={() => setShowCreateKey(true)}
-                className="gap-2 bg-blue-600 hover:bg-blue-500 text-white"
+                className="gap-1.5 font-mono text-xs"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-3.5 w-3.5" />
                 <span>Create API Key</span>
               </Button>
             </div>
 
             {keyError && (
-              <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-4 flex items-center gap-3 text-red-300 text-sm">
-                <AlertCircle className="h-5 w-5 shrink-0 text-red-400" />
+              <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3.5 flex items-center gap-2.5 text-xs text-[var(--status-down)]">
+                <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{keyError}</span>
               </div>
             )}
 
             {keysLoading ? (
-              <div className="py-12 flex justify-center text-slate-500">
-                <RefreshCw className="h-6 w-6 animate-spin" />
+              <div className="py-12 flex justify-center text-[var(--text-muted)]">
+                <RefreshCw className="h-5 w-5 animate-spin text-[var(--primary)]" />
               </div>
             ) : apiKeys.length === 0 ? (
-              <Card className="border-slate-800 bg-slate-900/50 text-center py-12">
-                <CardContent className="space-y-3">
-                  <div className="mx-auto w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-400">
-                    <Key className="h-6 w-6" />
+              <Card className="border-dashed">
+                <CardContent className="py-16 text-center space-y-2 max-w-sm mx-auto">
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">
+                    No API Keys Generated
                   </div>
-                  <h3 className="text-base font-semibold text-white">No API Keys Generated</h3>
-                  <p className="text-sm text-slate-400 max-w-sm mx-auto">
-                    Generate an API token with scoped permissions for CI/CD automation, custom scripts, or external integrations.
+                  <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                    Generate an API token with scoped permissions for CI/CD automation, custom monitoring scripts, or external integrations.
                   </p>
-                  <Button
-                    onClick={() => setShowCreateKey(true)}
-                    variant="outline"
-                    className="border-slate-700 text-slate-200 hover:bg-slate-800"
-                  >
-                    Create API Key
-                  </Button>
+                  <div className="pt-2">
+                    <Button
+                      size="sm"
+                      onClick={() => setShowCreateKey(true)}
+                      className="font-mono text-xs gap-1.5"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Create API Key</span>
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid gap-4">
+              <div className="rounded-[6px] border border-[var(--border)] bg-[var(--surface)] divide-y divide-[var(--border)]">
                 {apiKeys.map((key) => (
-                  <Card
+                  <div
                     key={key.id}
-                    className={`border-slate-800 bg-slate-900/60 shadow-xs transition-opacity ${
-                      key.isRevoked ? 'opacity-60 bg-slate-950/80 border-slate-900' : ''
+                    className={`p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                      key.isRevoked ? 'opacity-60 bg-[var(--surface-subtle)]' : ''
                     }`}
                   >
-                    <CardHeader className="pb-3 flex flex-row items-start justify-between">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-3">
-                          <CardTitle className="text-base text-white font-semibold">
-                            {key.name}
-                          </CardTitle>
-                          <Badge
-                            variant={key.isRevoked ? 'destructive' : 'default'}
-                            className={`text-xs ${
-                              key.isRevoked
-                                ? 'bg-red-950/80 text-red-400 border border-red-500/30'
-                                : 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
-                            }`}
-                          >
-                            {key.isRevoked ? 'Revoked' : 'Active'}
-                          </Badge>
-                        </div>
-                        <div className="text-xs font-mono text-slate-400">
-                          Prefix: <span className="text-slate-200 font-semibold">{key.keyPrefix}</span>
-                        </div>
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-xs text-[var(--text-primary)]">
+                          {key.name}
+                        </span>
+                        <StatusIndicator
+                          status={key.isRevoked ? 'disabled' : 'healthy'}
+                          variant="compact"
+                          label={key.isRevoked ? 'Revoked' : 'Active'}
+                        />
                       </div>
 
-                      {!key.isRevoked && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setRevokingKeyId(key.id)}
-                          className="text-xs border-red-500/30 text-red-400 hover:bg-red-950/30"
-                        >
-                          Revoke Key
-                        </Button>
-                      )}
-                    </CardHeader>
+                      <div className="text-[11px] font-mono text-[var(--text-muted)]">
+                        Prefix: <span className="text-[var(--text-primary)] font-semibold">{key.keyPrefix}</span>
+                      </div>
 
-                    <CardContent className="pt-0 border-t border-slate-800/60 mt-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-slate-500">Scopes:</span>
+                      <div className="flex items-center gap-2 flex-wrap pt-1">
+                        <span className="text-[10px] font-mono text-[var(--text-dim)]">Scopes:</span>
                         {key.scopes.map((s) => (
-                          <Badge
+                          <span
                             key={s}
-                            variant="outline"
-                            className="bg-slate-800/80 text-indigo-300 border-indigo-500/20 text-xs"
+                            className="font-mono text-[10px] px-1.5 py-0.2 rounded-[2px] bg-[var(--surface-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]"
                           >
                             {s}
-                          </Badge>
+                          </span>
                         ))}
                       </div>
 
-                      <div className="flex items-center gap-4 text-slate-400">
+                      <div className="flex items-center gap-4 text-[10px] font-mono text-[var(--text-dim)] pt-0.5">
                         <span>Created: {new Date(key.createdAt).toLocaleDateString()}</span>
                         <span>
                           Last used:{' '}
@@ -620,44 +610,54 @@ export default function SettingsPage() {
                             : 'Never'}
                         </span>
                       </div>
-                    </CardContent>
-                  </Card>
+                    </div>
+
+                    {!key.isRevoked && (
+                      <div className="shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-[var(--border-subtle)]">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setRevokingKeyId(key.id)}
+                          className="h-7 text-xs font-mono text-[var(--status-down)] border-[var(--status-down)]/30 hover:bg-[var(--status-down-bg)]/20"
+                        >
+                          Revoke Key
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
           </div>
         )}
-
-        {/* TAB 4: NOTIFICATIONS */}
-        {activeTab === 'notifications' && (
-          <NotificationsTab />
-        )}
       </main>
 
       {/* MODAL 1: REGISTER WEBHOOK */}
       {showCreateWebhook && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-6 space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--border)] rounded-[6px] shadow-2xl p-5 space-y-4 font-sans">
             <div>
-              <h3 className="text-lg font-semibold text-white">Register Webhook Endpoint</h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Enter your destination HTTPS endpoint and select the events to subscribe to.
+              <h3 className="text-sm font-semibold font-mono text-[var(--text-primary)]">
+                Register Webhook Endpoint
+              </h3>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                Configure destination HTTPS URL and event subscriptions.
               </p>
             </div>
 
             {createWebhookError && (
-              <div className="rounded-lg border border-red-500/30 bg-red-950/30 p-3 text-xs text-red-300 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+              <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3 text-xs text-[var(--status-down)] flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{createWebhookError}</span>
               </div>
             )}
 
-            <form onSubmit={handleCreateWebhook} className="space-y-4">
-              <div className="space-y-1.5">
+            <form onSubmit={handleCreateWebhook} className="space-y-3.5">
+              <div className="space-y-1">
                 <Label htmlFor="wh-name">Endpoint Name *</Label>
                 <Input
                   id="wh-name"
-                  placeholder="Production Incident Receiver"
+                  placeholder="e.g. Production PagerDuty Bridge"
                   value={newWebhookName}
                   onChange={(e) => setNewWebhookName(e.target.value)}
                   maxLength={100}
@@ -665,7 +665,7 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label htmlFor="wh-url">Destination URL *</Label>
                 <Input
                   id="wh-url"
@@ -674,31 +674,31 @@ export default function SettingsPage() {
                   onChange={(e) => setNewWebhookUrl(e.target.value)}
                   required
                 />
-                <p className="text-[11px] text-slate-500">
-                  Must be an HTTP(S) endpoint. Loopback, private IP ranges (RFC1918), and cloud metadata addresses are prohibited.
+                <p className="text-[10px] font-mono text-[var(--text-dim)]">
+                  Must be HTTP/HTTPS. Private IP ranges (RFC1918) and cloud metadata addresses are blocked.
                 </p>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label htmlFor="wh-desc">Description (Optional)</Label>
                 <Input
                   id="wh-desc"
-                  placeholder="Receives outage events for our internal operations service."
+                  placeholder="Context about this receiver"
                   value={newWebhookDescription}
                   onChange={(e) => setNewWebhookDescription(e.target.value)}
                   maxLength={255}
                 />
               </div>
 
-              <div className="space-y-2 pt-1">
+              <div className="space-y-1.5 pt-1">
                 <Label>Event Subscriptions</Label>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {WEBHOOK_EVENT_TYPES.map((ev) => {
                     const isChecked = newWebhookEvents.includes(ev);
                     return (
                       <label
                         key={ev}
-                        className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer"
+                        className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer"
                       >
                         <input
                           type="checkbox"
@@ -710,10 +710,10 @@ export default function SettingsPage() {
                               setNewWebhookEvents(newWebhookEvents.filter((item) => item !== ev));
                             }
                           }}
-                          className="rounded border-slate-700 bg-slate-800 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                          className="rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)] h-4 w-4"
                         />
-                        <span className="font-mono font-medium text-slate-200">{ev}</span>
-                        <span className="text-slate-500">
+                        <span className="font-mono text-xs text-[var(--text-primary)]">{ev}</span>
+                        <span className="text-[11px] text-[var(--text-muted)]">
                           {ev === 'incident.created' ? '— Triggered on 3 consecutive check failures' : '— Triggered when service recovers'}
                         </span>
                       </label>
@@ -722,10 +722,11 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)] font-mono text-xs">
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   onClick={() => setShowCreateWebhook(false)}
                   disabled={creatingWebhook}
                 >
@@ -733,8 +734,8 @@ export default function SettingsPage() {
                 </Button>
                 <Button
                   type="submit"
+                  size="sm"
                   disabled={creatingWebhook}
-                  className="bg-blue-600 hover:bg-blue-500 text-white"
                 >
                   {creatingWebhook ? 'Registering...' : 'Register Endpoint'}
                 </Button>
@@ -747,22 +748,24 @@ export default function SettingsPage() {
       {/* MODAL 2: REVEAL WEBHOOK SIGNING SECRET (SHOWN ONCE) */}
       {revealedSecret && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-slate-900 border border-emerald-500/30 rounded-xl shadow-2xl p-6 space-y-4">
+          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--status-healthy)]/40 rounded-[6px] shadow-2xl p-5 space-y-4 font-sans">
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-emerald-950/60 border border-emerald-500/30 text-emerald-400">
-                <ShieldAlert className="h-6 w-6" />
+              <div className="p-2 rounded-[4px] bg-[var(--status-healthy-bg)]/30 text-[var(--status-healthy)] shrink-0">
+                <ShieldAlert className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-white">Save Your Webhook Signing Secret</h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Endpoint <strong className="text-slate-200">{revealedSecret.name}</strong> was created. Copy this secret now — you will not be able to see it again!
+                <h3 className="text-sm font-semibold font-mono text-[var(--text-primary)]">
+                  Save Webhook Signing Secret Immediately
+                </h3>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  Endpoint <strong className="text-[var(--text-primary)]">{revealedSecret.name}</strong> was created. This secret is shown only once and cannot be retrieved again!
                 </p>
               </div>
             </div>
 
-            <div className="space-y-1.5 bg-slate-950 border border-slate-800 rounded-lg p-3">
+            <div className="space-y-1 bg-[var(--background)] border border-[var(--border)] rounded-[4px] p-3 font-mono">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-400">HMAC-SHA256 Secret</span>
+                <span className="text-[10px] uppercase text-[var(--text-dim)]">HMAC-SHA256 Signing Secret</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -770,30 +773,31 @@ export default function SettingsPage() {
                     setCopiedSecret(true);
                     setTimeout(() => setCopiedSecret(false), 2000);
                   }}
-                  className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
+                  className="flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline"
                 >
-                  {copiedSecret ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  <span>{copiedSecret ? 'Copied!' : 'Copy'}</span>
+                  {copiedSecret ? <Check className="h-3 w-3 text-[var(--status-healthy)]" /> : <Copy className="h-3 w-3" />}
+                  <span>{copiedSecret ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
-              <div className="font-mono text-xs text-emerald-400 break-all select-all pt-1">
+              <div className="text-xs text-[var(--status-healthy)] break-all select-all pt-1 font-bold">
                 {revealedSecret.secret}
               </div>
             </div>
 
-            <div className="rounded-lg bg-amber-950/30 border border-amber-500/30 p-3 text-xs text-amber-300 flex items-start gap-2 leading-relaxed">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+            <div className="rounded-[4px] bg-[var(--surface-subtle)] border border-[var(--border-subtle)] p-2.5 text-[11px] text-[var(--text-secondary)] flex items-start gap-2 leading-relaxed">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--status-warning)] mt-0.5" />
               <span>
-                DevPulse will sign all outgoing events with this secret using header <code className="text-white font-mono">x-devpulse-signature: t=timestamp,v1=signature</code>.
+                DevPulse signs all outgoing webhook payloads with this secret via HTTP header <code className="font-mono text-[var(--text-primary)]">x-devpulse-signature: t=timestamp,v1=signature</code>.
               </span>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end pt-1">
               <Button
+                size="sm"
                 onClick={() => setRevealedSecret(null)}
-                className="bg-blue-600 hover:bg-blue-500 text-white"
+                className="font-mono text-xs"
               >
-                I have saved this secret
+                I Have Saved This Secret
               </Button>
             </div>
           </div>
@@ -802,17 +806,19 @@ export default function SettingsPage() {
 
       {/* MODAL 3: EDIT WEBHOOK */}
       {editingWebhook && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--border)] rounded-[6px] shadow-2xl p-5 space-y-4 font-sans">
             <div>
-              <h3 className="text-lg font-semibold text-white">Edit Webhook Endpoint</h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Update destination URL, event subscriptions, or toggle status.
+              <h3 className="text-sm font-semibold font-mono text-[var(--text-primary)]">
+                Edit Webhook Endpoint
+              </h3>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                Update destination URL, description, or event subscriptions.
               </p>
             </div>
 
-            <form onSubmit={handleUpdateWebhook} className="space-y-4">
-              <div className="space-y-1.5">
+            <form onSubmit={handleUpdateWebhook} className="space-y-3.5">
+              <div className="space-y-1">
                 <Label htmlFor="edit-name">Endpoint Name *</Label>
                 <Input
                   id="edit-name"
@@ -823,7 +829,7 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label htmlFor="edit-url">Destination URL *</Label>
                 <Input
                   id="edit-url"
@@ -833,24 +839,23 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label htmlFor="edit-desc">Description (Optional)</Label>
                 <Input
                   id="edit-desc"
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
                   maxLength={255}
-                  placeholder="Optional context about this endpoint"
                 />
               </div>
 
-              <div className="space-y-2 pt-1">
+              <div className="space-y-1.5 pt-1">
                 <Label>Event Subscriptions</Label>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {WEBHOOK_EVENT_TYPES.map((ev) => {
                     const isChecked = editEvents.includes(ev);
                     return (
-                      <label key={ev} className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer">
+                      <label key={ev} className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
                         <input
                           type="checkbox"
                           checked={isChecked}
@@ -861,31 +866,32 @@ export default function SettingsPage() {
                               setEditEvents(editEvents.filter((item) => item !== ev));
                             }
                           }}
-                          className="rounded border-slate-700 bg-slate-800 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                          className="rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)] h-4 w-4"
                         />
-                        <span className="font-mono font-medium text-slate-200">{ev}</span>
+                        <span className="font-mono text-xs text-[var(--text-primary)]">{ev}</span>
                       </label>
                     );
                   })}
                 </div>
               </div>
 
-              <div className="pt-2">
-                <label className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer">
+              <div className="pt-1">
+                <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
                   <input
                     type="checkbox"
                     checked={editEnabled}
                     onChange={(e) => setEditEnabled(e.target.checked)}
-                    className="rounded border-slate-700 bg-slate-800 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                    className="rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)] h-4 w-4"
                   />
                   <span>Endpoint is active (receive events)</span>
                 </label>
               </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)] font-mono text-xs">
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   onClick={() => setEditingWebhook(null)}
                   disabled={updatingWebhook}
                 >
@@ -893,8 +899,8 @@ export default function SettingsPage() {
                 </Button>
                 <Button
                   type="submit"
+                  size="sm"
                   disabled={updatingWebhook}
-                  className="bg-blue-600 hover:bg-blue-500 text-white"
                 >
                   {updatingWebhook ? 'Saving...' : 'Save Changes'}
                 </Button>
@@ -906,41 +912,46 @@ export default function SettingsPage() {
 
       {/* MODAL 4: CREATE API KEY */}
       {showCreateKey && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-6 space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--border)] rounded-[6px] shadow-2xl p-5 space-y-4 font-sans">
             <div>
-              <h3 className="text-lg font-semibold text-white">Create Programmatic API Key</h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Select least-privilege scopes for automated scripts and monitoring agents.
+              <h3 className="text-sm font-semibold font-mono text-[var(--text-primary)]">
+                Create Programmatic API Key
+              </h3>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                Select least-privilege scopes for automated scripts and integrations.
               </p>
             </div>
 
             {createKeyError && (
-              <div className="rounded-lg border border-red-500/30 bg-red-950/30 p-3 text-xs text-red-300 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+              <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3 text-xs text-[var(--status-down)] flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{createKeyError}</span>
               </div>
             )}
 
-            <form onSubmit={handleCreateKey} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="key-name">API Key Friendly Name</Label>
+            <form onSubmit={handleCreateKey} className="space-y-3.5">
+              <div className="space-y-1">
+                <Label htmlFor="key-name">API Key Friendly Name *</Label>
                 <Input
                   id="key-name"
-                  placeholder="e.g. GitHub Actions CI Probe"
+                  placeholder="e.g. CI Health Probe"
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
                   required
                 />
               </div>
 
-              <div className="space-y-2 pt-1">
+              <div className="space-y-1.5 pt-1">
                 <Label>Allowed Scopes</Label>
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {API_KEY_SCOPES.map((sc) => {
                     const isChecked = newKeyScopes.includes(sc);
                     return (
-                      <label key={sc} className="flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer">
+                      <label
+                        key={sc}
+                        className="flex items-start gap-2.5 text-xs text-[var(--text-secondary)] cursor-pointer p-1.5 rounded-[4px] hover:bg-[var(--surface-subtle)] transition-colors"
+                      >
                         <input
                           type="checkbox"
                           checked={isChecked}
@@ -951,19 +962,27 @@ export default function SettingsPage() {
                               setNewKeyScopes(newKeyScopes.filter((item) => item !== sc));
                             }
                           }}
-                          className="rounded border-slate-700 bg-slate-800 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                          className="mt-0.5 rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)] h-4 w-4 shrink-0"
                         />
-                        <span className="font-mono font-medium text-slate-200">{sc}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-mono text-xs text-[var(--text-primary)] font-semibold">
+                            {sc}
+                          </span>
+                          <p className="text-[11px] text-[var(--text-muted)] leading-tight">
+                            {API_KEY_SCOPE_DESCRIPTIONS[sc]}
+                          </p>
+                        </div>
                       </label>
                     );
                   })}
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)] font-mono text-xs">
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   onClick={() => setShowCreateKey(false)}
                   disabled={creatingKey}
                 >
@@ -971,8 +990,8 @@ export default function SettingsPage() {
                 </Button>
                 <Button
                   type="submit"
+                  size="sm"
                   disabled={creatingKey}
-                  className="bg-blue-600 hover:bg-blue-500 text-white"
                 >
                   {creatingKey ? 'Generating...' : 'Generate API Key'}
                 </Button>
@@ -985,22 +1004,24 @@ export default function SettingsPage() {
       {/* MODAL 5: REVEAL RAW API KEY (SHOWN ONCE) */}
       {revealedKey && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-slate-900 border border-indigo-500/30 rounded-xl shadow-2xl p-6 space-y-4">
+          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--primary)]/40 rounded-[6px] shadow-2xl p-5 space-y-4 font-sans">
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-indigo-950/60 border border-indigo-500/30 text-indigo-400">
-                <Key className="h-6 w-6" />
+              <div className="p-2 rounded-[4px] bg-[var(--primary)]/20 text-[var(--primary)] shrink-0">
+                <Key className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-white">Save Your API Key</h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  API Key <strong className="text-slate-200">{revealedKey.name}</strong> was created. Please copy it now as it cannot be shown again!
+                <h3 className="text-sm font-semibold font-mono text-[var(--text-primary)]">
+                  Save Your API Key Immediately
+                </h3>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  API Key <strong className="text-[var(--text-primary)]">{revealedKey.name}</strong> was created. This token is shown only once and cannot be retrieved again!
                 </p>
               </div>
             </div>
 
-            <div className="space-y-1.5 bg-slate-950 border border-slate-800 rounded-lg p-3">
+            <div className="space-y-1 bg-[var(--background)] border border-[var(--border)] rounded-[4px] p-3 font-mono">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-400">Raw API Token</span>
+                <span className="text-[10px] uppercase text-[var(--text-dim)]">Raw API Token</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -1008,30 +1029,31 @@ export default function SettingsPage() {
                     setCopiedKey(true);
                     setTimeout(() => setCopiedKey(false), 2000);
                   }}
-                  className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300"
+                  className="flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline"
                 >
-                  {copiedKey ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  <span>{copiedKey ? 'Copied!' : 'Copy'}</span>
+                  {copiedKey ? <Check className="h-3 w-3 text-[var(--status-healthy)]" /> : <Copy className="h-3 w-3" />}
+                  <span>{copiedKey ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
-              <div className="font-mono text-xs text-indigo-300 break-all select-all pt-1">
+              <div className="text-xs text-[var(--primary)] break-all select-all pt-1 font-bold">
                 {revealedKey.rawKey}
               </div>
             </div>
 
-            <div className="rounded-lg bg-slate-800/50 border border-slate-700/50 p-3 text-xs text-slate-300 space-y-1">
-              <div className="font-semibold text-white">Usage:</div>
-              <div className="font-mono text-[11px] text-slate-400">
+            <div className="rounded-[4px] bg-[var(--surface-subtle)] border border-[var(--border-subtle)] p-2.5 text-[11px] font-mono text-[var(--text-secondary)] space-y-1">
+              <div className="text-[var(--text-dim)] uppercase text-[10px]">Usage Example:</div>
+              <div className="text-[var(--text-muted)] break-all">
                 curl -H &quot;x-api-key: {revealedKey.rawKey.slice(0, 16)}...&quot; http://localhost:4000/monitors
               </div>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end pt-1">
               <Button
+                size="sm"
                 onClick={() => setRevealedKey(null)}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white"
+                className="font-mono text-xs"
               >
-                I have copied my key
+                I Have Copied My Token
               </Button>
             </div>
           </div>
@@ -1054,7 +1076,7 @@ export default function SettingsPage() {
       <ConfirmDialog
         isOpen={Boolean(revokingKeyId)}
         title="Revoke API Key"
-        description="Are you sure you want to revoke this API key? Any applications or automated CI jobs utilizing this key will immediately be rejected."
+        description="Are you sure you want to revoke this API key? Applications or CI jobs using this token will immediately be rejected."
         confirmText="Revoke Key"
         isDestructive={true}
         isLoading={isRevokingKey}

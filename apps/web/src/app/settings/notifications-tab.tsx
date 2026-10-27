@@ -7,7 +7,7 @@ import {
 } from '@devpulse/shared';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   AlertCircle,
@@ -80,7 +80,7 @@ export function NotificationsTab() {
       });
 
       setPreferences(updated);
-      setSuccessMessage('Notification preferences saved successfully.');
+      setSuccessMessage('Notification routing preferences saved successfully.');
       setTimeout(() => {
         setSuccessMessage(null);
       }, 4000);
@@ -97,182 +97,184 @@ export function NotificationsTab() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-12 text-slate-400">
-        <RefreshCw className="h-6 w-6 animate-spin mr-2" />
-        <span>Loading preferences...</span>
+      <div className="flex items-center justify-center p-12 text-[var(--text-muted)] space-x-2">
+        <RefreshCw className="h-5 w-5 animate-spin text-[var(--primary)]" />
+        <span className="text-xs font-mono">Loading routing preferences...</span>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Bell className="h-5 w-5 text-blue-400" />
-            <span>Incident Alert Preferences</span>
-          </h2>
-          <p className="text-sm text-slate-400 mt-1">
-            Choose how you would like to be notified when your monitors experience outages or recover.
-          </p>
-        </div>
+    <div className="space-y-6 max-w-3xl">
+      <div>
+        <h2 className="text-base font-semibold font-mono text-[var(--text-primary)]">
+          Notification Routing Preferences
+        </h2>
+        <p className="text-xs text-[var(--text-muted)] mt-0.5">
+          Configure automated alert channels triggered on incident detection and recovery events.
+        </p>
       </div>
 
       {error && (
-        <div className="p-4 rounded-lg bg-red-950/40 border border-red-800 text-red-300 text-sm flex items-center gap-3">
-          <AlertCircle className="h-5 w-5 shrink-0 text-red-400" />
+        <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3.5 flex items-center gap-2.5 text-xs text-[var(--status-down)]">
+          <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {successMessage && (
-        <div className="p-4 rounded-lg bg-emerald-950/40 border border-emerald-800 text-emerald-300 text-sm flex items-center gap-3">
-          <Check className="h-5 w-5 shrink-0 text-emerald-400" />
+        <div className="rounded-[4px] border border-[var(--status-healthy)]/40 bg-[var(--status-healthy-bg)]/20 p-3.5 flex items-center gap-2.5 text-xs text-[var(--status-healthy)]">
+          <Check className="h-4 w-4 shrink-0" />
           <span>{successMessage}</span>
         </div>
       )}
 
       <form onSubmit={handleSave} className="space-y-6">
-        {/* In-App Notifications Card */}
-        <Card className="bg-slate-900 border-slate-800">
-          <CardHeader>
+        {/* In-App Notifications Section */}
+        <Card className="p-0 overflow-hidden">
+          <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-subtle)] flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400">
-                <Bell className="h-4 w-4" />
-              </div>
+              <Bell className="h-4 w-4 text-[var(--primary)]" />
               <div>
-                <CardTitle className="text-base font-semibold text-white">
-                  In-App Notifications
-                </CardTitle>
-                <CardDescription className="text-xs text-slate-400">
-                  Receive notifications inside the DevPulse navigation bar and notifications center.
-                </CardDescription>
+                <h3 className="text-xs font-mono font-semibold text-[var(--text-primary)] uppercase tracking-wider">
+                  In-App Notification Center
+                </h3>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Dispatched to the navigation bar feed and alerts page.
+                </p>
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4 pt-0">
-            <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/50 hover:bg-slate-950 transition-colors cursor-pointer">
+            <Badge variant="outline" className="text-[10px] font-mono text-[var(--text-secondary)]">
+              Real-time
+            </Badge>
+          </div>
+
+          <CardContent className="p-4 space-y-3">
+            <label className="flex items-start gap-3 p-3 rounded-[4px] border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer">
               <input
                 type="checkbox"
                 checked={inAppCreated}
                 onChange={(e) => setInAppCreated(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                className="mt-0.5 h-4 w-4 rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)]"
               />
-              <div className="flex-1">
-                <div className="text-sm font-medium text-slate-200">
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-[var(--text-primary)]">
                   Incident Opened Alerts
                 </div>
-                <div className="text-xs text-slate-400">
-                  Generate an in-app alert when a monitor fails 3 consecutive checks and opens an incident.
+                <div className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                  Generate an in-app alert when a target fails 3 consecutive health checks and opens an active outage.
                 </div>
               </div>
-              <Badge variant="outline" className="text-xs border-slate-700 text-slate-300">
+              <span className="text-[10px] font-mono text-[var(--text-dim)] shrink-0 hidden sm:inline">
                 Default: Enabled
-              </Badge>
+              </span>
             </label>
 
-            <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/50 hover:bg-slate-950 transition-colors cursor-pointer">
+            <label className="flex items-start gap-3 p-3 rounded-[4px] border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer">
               <input
                 type="checkbox"
                 checked={inAppResolved}
                 onChange={(e) => setInAppResolved(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                className="mt-0.5 h-4 w-4 rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)]"
               />
-              <div className="flex-1">
-                <div className="text-sm font-medium text-slate-200">
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-[var(--text-primary)]">
                   Incident Resolved Alerts
                 </div>
-                <div className="text-xs text-slate-400">
-                  Generate an in-app alert when health checks pass and an open incident is resolved.
+                <div className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                  Generate an in-app alert when a previously failing target recovers and health checks pass.
                 </div>
               </div>
-              <Badge variant="outline" className="text-xs border-slate-700 text-slate-300">
+              <span className="text-[10px] font-mono text-[var(--text-dim)] shrink-0 hidden sm:inline">
                 Default: Enabled
-              </Badge>
+              </span>
             </label>
           </CardContent>
         </Card>
 
-        {/* Email Notifications Card */}
-        <Card className="bg-slate-900 border-slate-800">
-          <CardHeader>
+        {/* Email Notifications Section */}
+        <Card className="p-0 overflow-hidden">
+          <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-subtle)] flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400">
-                <Mail className="h-4 w-4" />
-              </div>
+              <Mail className="h-4 w-4 text-[var(--primary)]" />
               <div>
-                <CardTitle className="text-base font-semibold text-white">
-                  Email Notifications
-                </CardTitle>
-                <CardDescription className="text-xs text-slate-400">
-                  Dispatch email notifications directly to your user account email address.
-                </CardDescription>
+                <h3 className="text-xs font-mono font-semibold text-[var(--text-primary)] uppercase tracking-wider">
+                  Email Outbox Dispatch
+                </h3>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Transactional emails sent to your registered user address.
+                </p>
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4 pt-0">
-            <div className="p-3.5 rounded-lg bg-blue-950/30 border border-blue-900/40 text-blue-300 text-xs flex items-start gap-2.5">
-              <Info className="h-4 w-4 shrink-0 text-blue-400 mt-0.5" />
-              <div className="leading-relaxed">
-                Email delivery uses the transactional outbox pipeline and requires SMTP credentials configured on the server. If using the demo account (<code className="text-blue-200">demo@devpulse.dev</code>), real external SMTP transmission is bypassed and recorded as a simulated email delivery to prevent outbound network traffic.
+            <Badge variant="outline" className="text-[10px] font-mono text-[var(--text-secondary)]">
+              SMTP
+            </Badge>
+          </div>
+
+          <CardContent className="p-4 space-y-3">
+            {/* Operational note on SMTP and demo account */}
+            <div className="p-3 rounded-[4px] bg-[var(--surface-subtle)] border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] flex items-start gap-2.5">
+              <Info className="h-4 w-4 shrink-0 text-[var(--primary)] mt-0.5" />
+              <div className="text-[11px] leading-relaxed">
+                Email dispatch uses a transactional outbox queue with automated background retry workers. For the DevPulse demo account (<code className="font-mono text-[var(--primary)]">demo@devpulse.dev</code>), external SMTP transmission is skipped. The email delivery is simulated and recorded by DevPulse without sending a real email.
               </div>
             </div>
 
-            <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/50 hover:bg-slate-950 transition-colors cursor-pointer">
+            <label className="flex items-start gap-3 p-3 rounded-[4px] border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer">
               <input
                 type="checkbox"
                 checked={emailCreated}
                 onChange={(e) => setEmailCreated(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                className="mt-0.5 h-4 w-4 rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)]"
               />
-              <div className="flex-1">
-                <div className="text-sm font-medium text-slate-200">
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-[var(--text-primary)]">
                   Email on Incident Opened
                 </div>
-                <div className="text-xs text-slate-400">
+                <div className="text-[11px] text-[var(--text-muted)] leading-relaxed">
                   Send an email notification immediately when an outage begins.
                 </div>
               </div>
-              <Badge variant="outline" className="text-xs border-slate-700 text-slate-400">
+              <span className="text-[10px] font-mono text-[var(--text-dim)] shrink-0 hidden sm:inline">
                 Opt-in
-              </Badge>
+              </span>
             </label>
 
-            <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/50 hover:bg-slate-950 transition-colors cursor-pointer">
+            <label className="flex items-start gap-3 p-3 rounded-[4px] border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] transition-colors cursor-pointer">
               <input
                 type="checkbox"
                 checked={emailResolved}
                 onChange={(e) => setEmailResolved(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                className="mt-0.5 h-4 w-4 rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)]"
               />
-              <div className="flex-1">
-                <div className="text-sm font-medium text-slate-200">
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-[var(--text-primary)]">
                   Email on Incident Resolved
                 </div>
-                <div className="text-xs text-slate-400">
-                  Send an email notification when monitor recovers with total downtime duration.
+                <div className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                  Send an email summary with total downtime duration when service recovers.
                 </div>
               </div>
-              <Badge variant="outline" className="text-xs border-slate-700 text-slate-400">
+              <span className="text-[10px] font-mono text-[var(--text-dim)] shrink-0 hidden sm:inline">
                 Opt-in
-              </Badge>
+              </span>
             </label>
           </CardContent>
         </Card>
 
         {/* Action Button */}
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-2">
           <Button
             type="submit"
             disabled={isSaving}
-            className="gap-2 bg-blue-600 hover:bg-blue-500 text-white"
+            className="gap-2 font-mono text-xs"
           >
             {isSaving ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <Save className="h-4 w-4" />
+              <Save className="h-3.5 w-3.5" />
             )}
-            <span>{isSaving ? 'Saving...' : 'Save Alert Preferences'}</span>
+            <span>{isSaving ? 'Saving Preferences...' : 'Save Preferences'}</span>
           </Button>
         </div>
       </form>

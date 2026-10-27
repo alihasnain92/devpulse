@@ -18,7 +18,7 @@ import {
 } from '@devpulse/shared';
 import { apiClient, ApiClientError } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   AlertCircle,
@@ -40,6 +40,34 @@ import {
 
 interface DeliveriesTabProps {
   webhooks: WebhookEndpointDto[];
+}
+
+function timeAgo(dateString: string): string {
+  const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatExactDateTime(dateString: string): string {
+  try {
+    const d = new Date(dateString);
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(d);
+  } catch {
+    return dateString;
+  }
 }
 
 export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
@@ -69,6 +97,7 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
   const [attempts, setAttempts] = React.useState<WebhookAttemptDto[]>([]);
   const [attemptsLoading, setAttemptsLoading] = React.useState(false);
   const [copiedPayload, setCopiedPayload] = React.useState(false);
+  const [inspectorTab, setInspectorTab] = React.useState<'payload' | 'response'>('payload');
 
   // Manual Replay Modal State
   const [replayingDelivery, setReplayingDelivery] = React.useState<WebhookDeliveryDto | null>(null);
@@ -141,6 +170,7 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
     setDetailLoading(true);
     setDetailError(null);
     setAttemptsLoading(true);
+    setInspectorTab('payload');
 
     try {
       const detailPromise = apiClient.getWebhookDelivery(deliveryId);
@@ -182,9 +212,11 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
         idempotencyKey,
       );
 
-      setReplaySuccess(
-        res.message || 'Replay accepted. Delivery will be processed asynchronously.',
-      );
+      const successText = res.isIdempotent
+        ? 'Existing idempotent replay delivery returned.'
+        : res.message || 'Replay accepted and scheduled for execution.';
+
+      setReplaySuccess(successText);
 
       // Refresh list
       await loadDeliveries(currentCursor);
@@ -195,7 +227,9 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
         setReplaySuccess(null);
       }, 1800);
     } catch (err: unknown) {
-      setReplayError(err instanceof ApiClientError ? err.message : 'Failed to trigger replay');
+      setReplayError(
+        err instanceof ApiClientError ? err.message : 'Failed to trigger delivery replay',
+      );
     } finally {
       setIsReplaying(false);
     }
@@ -206,28 +240,28 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
     switch (status) {
       case WEBHOOK_DELIVERY_STATUS.DELIVERED:
         return (
-          <Badge className="bg-emerald-950/70 border-emerald-500/30 text-emerald-400 hover:bg-emerald-950/90 gap-1 font-mono text-[11px]">
+          <Badge variant="healthy" className="gap-1 font-mono text-[10px] px-1.5 py-0">
             <CheckCircle2 className="h-3 w-3 shrink-0" />
             <span>DELIVERED</span>
           </Badge>
         );
       case WEBHOOK_DELIVERY_STATUS.FAILED:
         return (
-          <Badge className="bg-red-950/70 border-red-500/30 text-red-400 hover:bg-red-950/90 gap-1 font-mono text-[11px]">
+          <Badge variant="destructive" className="gap-1 font-mono text-[10px] px-1.5 py-0">
             <XCircle className="h-3 w-3 shrink-0" />
             <span>FAILED</span>
           </Badge>
         );
       case WEBHOOK_DELIVERY_STATUS.RETRYING:
         return (
-          <Badge className="bg-amber-950/70 border-amber-500/30 text-amber-400 hover:bg-amber-950/90 gap-1 font-mono text-[11px]">
+          <Badge variant="warning" className="gap-1 font-mono text-[10px] px-1.5 py-0">
             <Clock className="h-3 w-3 shrink-0" />
             <span>RETRYING</span>
           </Badge>
         );
       case WEBHOOK_DELIVERY_STATUS.PROCESSING:
         return (
-          <Badge className="bg-blue-950/70 border-blue-500/30 text-blue-400 hover:bg-blue-950/90 gap-1 font-mono text-[11px]">
+          <Badge variant="outline" className="border-[var(--primary)] text-[var(--primary)] gap-1 font-mono text-[10px] px-1.5 py-0">
             <RefreshCw className="h-3 w-3 shrink-0 animate-spin" />
             <span>PROCESSING</span>
           </Badge>
@@ -235,7 +269,7 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
       case WEBHOOK_DELIVERY_STATUS.PENDING:
       default:
         return (
-          <Badge className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 gap-1 font-mono text-[11px]">
+          <Badge variant="outline" className="border-[var(--border)] text-[var(--text-muted)] gap-1 font-mono text-[10px] px-1.5 py-0">
             <Clock className="h-3 w-3 shrink-0" />
             <span>PENDING</span>
           </Badge>
@@ -247,35 +281,34 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
   function renderOriginBadge(origin: WebhookDeliveryOrigin | string) {
     if (origin === WEBHOOK_DELIVERY_ORIGIN.MANUAL_REPLAY) {
       return (
-        <Badge className="bg-purple-950/70 border-purple-500/40 text-purple-300 hover:bg-purple-950/90 gap-1 font-mono text-[11px]">
-          <RotateCw className="h-3 w-3 shrink-0" />
-          <span>REPLAY</span>
-        </Badge>
+        <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-[2px] bg-[var(--surface-active)] text-[var(--primary)] border border-[var(--primary)]/30">
+          REPLAY
+        </span>
       );
     }
     return (
-      <Badge className="bg-slate-800/80 border-slate-700/60 text-slate-400 font-mono text-[11px]">
-        <span>AUTO</span>
-      </Badge>
+      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-[2px] bg-[var(--surface-subtle)] text-[var(--text-muted)] border border-[var(--border-subtle)]">
+        AUTO
+      </span>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner & Refresh */}
+    <div className="space-y-5">
+      {/* Top Section Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <History className="h-5 w-5 text-blue-400" />
-            <span>Delivery History & Inspection</span>
+          <h2 className="text-base font-semibold font-mono text-[var(--text-primary)] flex items-center gap-2">
+            <History className="h-4 w-4 text-[var(--primary)]" />
+            <span>Webhook Delivery Audit Log</span>
             {totalCount !== undefined && (
-              <Badge variant="secondary" className="ml-1 text-xs">
-                {totalCount} Total
+              <Badge variant="secondary" className="font-mono text-xs tabular-nums">
+                {totalCount} total
               </Badge>
             )}
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Immutable audit trail of all automatic and manual webhook dispatch attempts with payload and response inspection.
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            Immutable transactional delivery trail with attempt history, socket-pinned execution logs, and manual replay.
           </p>
         </div>
 
@@ -284,24 +317,24 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
           size="sm"
           onClick={() => loadDeliveries(currentCursor)}
           disabled={isLoading}
-          className="gap-2 shrink-0 border-slate-700 hover:bg-slate-800 text-slate-300"
+          className="gap-1.5 shrink-0 font-mono text-xs"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           <span>Refresh</span>
         </Button>
       </div>
 
-      {/* Filters Bar */}
-      <Card className="bg-slate-900 border-slate-800">
-        <CardContent className="p-4">
+      {/* Filter Toolbar */}
+      <Card className="p-0 overflow-hidden">
+        <div className="p-3 sm:p-4 bg-[var(--surface-subtle)] border-b border-[var(--border)] text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {/* Filter: Endpoint */}
             <div className="space-y-1">
-              <label className="text-[11px] font-medium text-slate-400">Endpoint</label>
+              <label className="text-[11px] font-mono text-[var(--text-secondary)]">Endpoint</label>
               <select
                 value={filterEndpointId}
                 onChange={(e) => setFilterEndpointId(e.target.value)}
-                className="w-full text-xs rounded-md bg-slate-950 border border-slate-800 px-3 py-2 text-slate-200 focus:outline-hidden focus:border-blue-500"
+                className="w-full text-xs rounded-[4px] bg-[var(--surface)] border border-[var(--border)] px-2.5 py-1.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] font-mono"
               >
                 <option value="">All Endpoints</option>
                 {webhooks.map((w) => (
@@ -314,11 +347,11 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
 
             {/* Filter: Status */}
             <div className="space-y-1">
-              <label className="text-[11px] font-medium text-slate-400">Delivery Status</label>
+              <label className="text-[11px] font-mono text-[var(--text-secondary)]">Delivery Status</label>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value as WebhookDeliveryStatus | '')}
-                className="w-full text-xs rounded-md bg-slate-950 border border-slate-800 px-3 py-2 text-slate-200 focus:outline-hidden focus:border-blue-500"
+                className="w-full text-xs rounded-[4px] bg-[var(--surface)] border border-[var(--border)] px-2.5 py-1.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] font-mono"
               >
                 <option value="">All Statuses</option>
                 <option value={WEBHOOK_DELIVERY_STATUS.DELIVERED}>DELIVERED</option>
@@ -331,11 +364,11 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
 
             {/* Filter: Origin */}
             <div className="space-y-1">
-              <label className="text-[11px] font-medium text-slate-400">Origin / Lineage</label>
+              <label className="text-[11px] font-mono text-[var(--text-secondary)]">Origin / Lineage</label>
               <select
                 value={filterOrigin}
                 onChange={(e) => setFilterOrigin(e.target.value as WebhookDeliveryOrigin | '')}
-                className="w-full text-xs rounded-md bg-slate-950 border border-slate-800 px-3 py-2 text-slate-200 focus:outline-hidden focus:border-blue-500"
+                className="w-full text-xs rounded-[4px] bg-[var(--surface)] border border-[var(--border)] px-2.5 py-1.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] font-mono"
               >
                 <option value="">All Origins</option>
                 <option value={WEBHOOK_DELIVERY_ORIGIN.AUTOMATIC}>AUTOMATIC</option>
@@ -345,13 +378,13 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
 
             {/* Filter: Event Type */}
             <div className="space-y-1">
-              <label className="text-[11px] font-medium text-slate-400">Event Type</label>
+              <label className="text-[11px] font-mono text-[var(--text-secondary)]">Event Type</label>
               <select
                 value={filterEventType}
                 onChange={(e) => setFilterEventType(e.target.value as WebhookEventType | '')}
-                className="w-full text-xs rounded-md bg-slate-950 border border-slate-800 px-3 py-2 text-slate-200 focus:outline-hidden focus:border-blue-500"
+                className="w-full text-xs rounded-[4px] bg-[var(--surface)] border border-[var(--border)] px-2.5 py-1.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-focus)] font-mono"
               >
-                <option value="">All Event Types</option>
+                <option value="">All Events</option>
                 {WEBHOOK_EVENT_TYPES.map((ev) => (
                   <option key={ev} value={ev}>
                     {ev}
@@ -363,199 +396,263 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
             {/* Reset Filters */}
             <div className="flex items-end">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={handleResetFilters}
-                className="w-full text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                className="w-full text-xs font-mono h-8"
               >
                 Reset Filters
               </Button>
             </div>
           </div>
-        </CardContent>
+        </div>
       </Card>
 
       {/* Error state */}
       {error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-950/30 p-4 text-xs text-red-300 flex items-center gap-3">
-          <AlertCircle className="h-5 w-5 shrink-0 text-red-400" />
+        <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3.5 text-xs text-[var(--status-down)] flex items-center gap-2.5">
+          <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Deliveries Table */}
-      <Card className="bg-slate-900 border-slate-800">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-950/60 text-slate-400 border-b border-slate-800 text-[11px] font-medium">
+      {/* Deliveries Table & Mobile Card View */}
+      <div className="rounded-[6px] border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+        {/* Desktop Table View (>= 768px) */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-[var(--border)] text-[var(--text-muted)] font-mono text-[11px] bg-[var(--surface-subtle)]">
+                <th className="py-2.5 px-3 font-medium">STATUS</th>
+                <th className="py-2.5 px-3 font-medium">ORIGIN</th>
+                <th className="py-2.5 px-3 font-medium">ENDPOINT SNAPSHOT</th>
+                <th className="py-2.5 px-3 font-medium">EVENT</th>
+                <th className="py-2.5 px-3 font-medium text-center">ATTEMPTS</th>
+                <th className="py-2.5 px-3 font-medium">CREATED</th>
+                <th className="py-2.5 px-3 font-medium text-right">ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--border)] font-mono">
+              {isLoading ? (
                 <tr>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Origin</th>
-                  <th className="py-3 px-4">Endpoint Snapshot</th>
-                  <th className="py-3 px-4">Event</th>
-                  <th className="py-3 px-4 text-center">Attempts</th>
-                  <th className="py-3 px-4">Timestamp</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  <td colSpan={7} className="py-12 text-center text-[var(--text-muted)]">
+                    <div className="flex items-center justify-center gap-2">
+                      <RefreshCw className="h-4 w-4 animate-spin text-[var(--primary)]" />
+                      <span>Loading delivery records...</span>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-500">
-                      <div className="flex items-center justify-center gap-2">
-                        <RefreshCw className="h-4 w-4 animate-spin text-blue-500" />
-                        <span>Loading webhook delivery records...</span>
+              ) : deliveries.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-16 text-center text-[var(--text-muted)]">
+                    <div className="space-y-1 max-w-sm mx-auto">
+                      <History className="h-8 w-8 mx-auto text-[var(--text-dim)] mb-2" />
+                      <p className="text-xs font-semibold text-[var(--text-primary)]">No Webhook Deliveries Recorded</p>
+                      <p className="text-[11px] text-[var(--text-muted)]">
+                        {filterStatus || filterOrigin || filterEventType || filterEndpointId
+                          ? 'No deliveries match the applied filters.'
+                          : 'Deliveries are logged automatically when monitored targets trigger incidents or recoveries.'}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                deliveries.map((delivery) => (
+                  <tr key={delivery.id} className="hover:bg-[var(--surface-hover)] transition-colors">
+                    {/* Status */}
+                    <td className="py-2.5 px-3 whitespace-nowrap">
+                      {renderStatusBadge(delivery.status)}
+                    </td>
+
+                    {/* Origin */}
+                    <td className="py-2.5 px-3 whitespace-nowrap">
+                      {renderOriginBadge(delivery.origin)}
+                    </td>
+
+                    {/* Endpoint Snapshot */}
+                    <td className="py-2.5 px-3 max-w-xs">
+                      <div className="font-semibold text-[var(--text-primary)] truncate">{delivery.endpointName}</div>
+                      <div className="font-mono text-[11px] text-[var(--text-muted)] truncate select-all">
+                        {delivery.destinationUrl}
                       </div>
                     </td>
-                  </tr>
-                ) : deliveries.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-500">
-                      <div className="space-y-1">
-                        <History className="h-8 w-8 mx-auto text-slate-600 mb-2 opacity-50" />
-                        <p className="text-sm font-medium text-slate-300">No Webhook Deliveries Recorded</p>
-                        <p className="text-xs text-slate-500">
-                          {filterStatus || filterOrigin || filterEventType || filterEndpointId
-                            ? 'No deliveries match the applied filters.'
-                            : 'Deliveries will be logged automatically when incidents are detected or resolved.'}
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  deliveries.map((delivery) => (
-                    <tr key={delivery.id} className="hover:bg-slate-800/40 transition-colors">
-                      {/* Status */}
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        {renderStatusBadge(delivery.status)}
-                      </td>
 
-                      {/* Origin */}
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        {renderOriginBadge(delivery.origin)}
-                      </td>
-
-                      {/* Endpoint Snapshot */}
-                      <td className="py-3 px-4 max-w-xs">
-                        <div className="font-medium text-slate-200 truncate">{delivery.endpointName}</div>
-                        <div className="font-mono text-[11px] text-slate-400 truncate mt-0.5">
-                          {delivery.destinationUrl}
-                        </div>
-                      </td>
-
-                      {/* Event Type */}
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        {delivery.eventType ? (
-                          <span className="font-mono text-[11px] text-blue-300 bg-blue-950/40 border border-blue-500/20 px-2 py-0.5 rounded">
-                            {delivery.eventType}
-                          </span>
-                        ) : (
-                          <span className="text-slate-500">—</span>
-                        )}
-                      </td>
-
-                      {/* Attempt Count */}
-                      <td className="py-3 px-4 text-center whitespace-nowrap">
-                        <span className="font-mono text-slate-300 font-medium">
-                          {delivery.attemptCount}
+                    {/* Event Type */}
+                    <td className="py-2.5 px-3 whitespace-nowrap">
+                      {delivery.eventType ? (
+                        <span className="font-mono text-[10px] text-[var(--primary)] bg-[var(--primary)]/10 border border-[var(--primary)]/20 px-1.5 py-0.5 rounded-[2px]">
+                          {delivery.eventType}
                         </span>
-                        <span className="text-slate-500 text-[10px]"> / 6</span>
-                        {delivery.lastHttpStatus && (
-                          <div className="text-[10px] font-mono text-slate-400 mt-0.5">
-                            HTTP {delivery.lastHttpStatus}
-                          </div>
-                        )}
-                      </td>
+                      ) : (
+                        <span className="text-[var(--text-dim)]">—</span>
+                      )}
+                    </td>
 
-                      {/* Timestamp */}
-                      <td className="py-3 px-4 whitespace-nowrap text-slate-400 text-[11px]">
-                        <div>{new Date(delivery.createdAt).toLocaleDateString()}</div>
-                        <div className="text-slate-500 text-[10px]">
-                          {new Date(delivery.createdAt).toLocaleTimeString()}
+                    {/* Attempt Count */}
+                    <td className="py-2.5 px-3 text-center whitespace-nowrap tabular-nums">
+                      <span className="font-bold text-[var(--text-primary)]">
+                        {delivery.attemptCount}
+                      </span>
+                      <span className="text-[var(--text-dim)] text-[10px]"> / 6</span>
+                      {delivery.lastHttpStatus && (
+                        <div className="text-[10px] font-mono text-[var(--text-muted)]">
+                          HTTP {delivery.lastHttpStatus}
                         </div>
-                      </td>
+                      )}
+                    </td>
 
-                      {/* Actions */}
-                      <td className="py-3 px-4 text-right whitespace-nowrap space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openDetailModal(delivery.id)}
-                          className="h-7 px-2 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-950/40"
-                        >
-                          Inspect
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openReplayModal(delivery)}
-                          className="h-7 px-2 text-xs text-purple-400 hover:text-purple-300 hover:bg-purple-950/40 gap-1"
-                        >
-                          <RotateCw className="h-3 w-3" />
-                          <span>Replay</span>
-                        </Button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                    {/* Timestamp */}
+                    <td className="py-2.5 px-3 whitespace-nowrap text-[var(--text-muted)] text-[11px] tabular-nums">
+                      <div>{timeAgo(delivery.createdAt)}</div>
+                      <div className="text-[10px] text-[var(--text-dim)]">
+                        {formatExactDateTime(delivery.createdAt)}
+                      </div>
+                    </td>
+
+                    {/* Actions */}
+                    <td className="py-2.5 px-3 text-right whitespace-nowrap space-x-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openDetailModal(delivery.id)}
+                        className="h-6 px-2 text-[11px] font-mono text-[var(--primary)] hover:text-[var(--primary-hover)]"
+                      >
+                        Inspect
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openReplayModal(delivery)}
+                        className="h-6 px-2 text-[11px] font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] gap-1"
+                      >
+                        <RotateCw className="h-2.5 w-2.5" />
+                        <span>Replay</span>
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile Structured Card List (< 768px) */}
+        <div className="md:hidden divide-y divide-[var(--border)] font-mono">
+          {isLoading ? (
+            <div className="p-8 text-center text-xs text-[var(--text-muted)]">
+              Loading deliveries...
+            </div>
+          ) : deliveries.length === 0 ? (
+            <div className="p-8 text-center text-xs text-[var(--text-muted)]">
+              No webhook deliveries recorded.
+            </div>
+          ) : (
+            deliveries.map((delivery) => (
+              <div key={delivery.id} className="p-3.5 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    {renderStatusBadge(delivery.status)}
+                    {renderOriginBadge(delivery.origin)}
+                  </div>
+                  <div className="text-[10px] text-[var(--text-dim)] tabular-nums">
+                    {timeAgo(delivery.createdAt)}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                    {delivery.endpointName}
+                  </div>
+                  <div className="text-[11px] text-[var(--text-muted)] truncate">
+                    {delivery.destinationUrl}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[var(--border-subtle)]">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-[var(--primary)]">
+                      {delivery.eventType || 'event'}
+                    </span>
+                    <span className="text-[var(--text-dim)]">•</span>
+                    <span className="text-[var(--text-muted)] tabular-nums">
+                      {delivery.attemptCount}/6 attempts
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openDetailModal(delivery.id)}
+                      className="h-6 px-1.5 text-[11px] text-[var(--primary)]"
+                    >
+                      Inspect
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openReplayModal(delivery)}
+                      className="h-6 px-1.5 text-[11px] text-[var(--text-secondary)]"
+                    >
+                      Replay
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Pagination Footer */}
+        <div className="p-3 bg-[var(--surface-subtle)] border-t border-[var(--border)] flex items-center justify-between text-xs font-mono text-[var(--text-muted)]">
+          <div>
+            {cursorHistory.length > 0
+              ? `Page ${cursorHistory.length + 1}`
+              : deliveries.length > 0
+              ? 'Page 1'
+              : 'Page 0'}
           </div>
 
-          {/* Pagination Controls */}
-          <div className="p-3 bg-slate-950/40 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-            <div>
-              {cursorHistory.length > 0
-                ? `Page ${cursorHistory.length + 1}`
-                : deliveries.length > 0
-                ? 'Page 1'
-                : 'Page 0'}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handlePrevPage}
-                disabled={cursorHistory.length === 0 || isLoading}
-                className="h-7 px-2.5 text-xs border-slate-700 hover:bg-slate-800"
-              >
-                <ChevronLeft className="h-3.5 w-3.5 mr-1" />
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleNextPage}
-                disabled={!hasMore || isLoading}
-                className="h-7 px-2.5 text-xs border-slate-700 hover:bg-slate-800"
-              >
-                Next
-                <ChevronRight className="h-3.5 w-3.5 ml-1" />
-              </Button>
-            </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrevPage}
+              disabled={cursorHistory.length === 0 || isLoading}
+              className="h-7 px-2.5 text-xs font-mono"
+            >
+              <ChevronLeft className="h-3.5 w-3.5 mr-1" />
+              <span>Previous</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNextPage}
+              disabled={!hasMore || isLoading}
+              className="h-7 px-2.5 text-xs font-mono"
+            >
+              <span>Next</span>
+              <ChevronRight className="h-3.5 w-3.5 ml-1" />
+            </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* MODAL 1: DELIVERY INSPECTION MODAL */}
+      {/* DELIVERY INSPECTION MODAL */}
       {inspectingDeliveryId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-3xl max-h-[90vh] flex flex-col bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden">
+          <div className="w-full max-w-3xl max-h-[90vh] flex flex-col bg-[var(--surface)] border border-[var(--border)] rounded-[6px] shadow-2xl overflow-hidden font-sans">
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/60">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-950/60 border border-blue-500/30 text-blue-400">
-                  <History className="h-5 w-5" />
-                </div>
+            <div className="flex items-center justify-between p-4 border-b border-[var(--border)] bg-[var(--surface-subtle)]">
+              <div className="flex items-center gap-2.5">
+                <History className="h-4 w-4 text-[var(--primary)] shrink-0" />
                 <div>
-                  <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                    <span>Delivery Inspection</span>
+                  <h3 className="text-sm font-semibold font-mono text-[var(--text-primary)] flex items-center gap-2">
+                    <span>Delivery Inspector</span>
                     {deliveryDetail && renderStatusBadge(deliveryDetail.status)}
                     {deliveryDetail && renderOriginBadge(deliveryDetail.origin)}
                   </h3>
-                  <p className="font-mono text-xs text-slate-400 mt-0.5 select-all">
+                  <p className="font-mono text-[11px] text-[var(--text-muted)] mt-0.5 select-all">
                     ID: {inspectingDeliveryId}
                   </p>
                 </div>
@@ -564,84 +661,83 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
               <button
                 type="button"
                 onClick={() => setInspectingDeliveryId(null)}
-                className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800"
+                className="p-1 rounded-[2px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                aria-label="Close delivery inspector"
               >
-                <X className="h-5 w-5" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
               {detailLoading ? (
-                <div className="py-16 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
-                  <RefreshCw className="h-6 w-6 animate-spin text-blue-500" />
-                  <span>Loading delivery metadata and attempts...</span>
+                <div className="py-16 text-center text-[var(--text-muted)] flex flex-col items-center justify-center gap-2 font-mono text-xs">
+                  <RefreshCw className="h-5 w-5 animate-spin text-[var(--primary)]" />
+                  <span>Loading delivery attempts and execution trace...</span>
                 </div>
               ) : detailError ? (
-                <div className="rounded-lg border border-red-500/30 bg-red-950/30 p-4 text-xs text-red-300 flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-red-400 shrink-0" />
+                <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3 text-xs text-[var(--status-down)] flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-[var(--status-down)] shrink-0" />
                   <span>{detailError}</span>
                 </div>
               ) : deliveryDetail ? (
                 <>
                   {/* Section 1: Snapshot vs Current Endpoint Configuration */}
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                      <Shield className="h-3.5 w-3.5 text-blue-400" />
+                  <div className="space-y-2.5">
+                    <h4 className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-1.5">
+                      <Shield className="h-3.5 w-3.5 text-[var(--primary)]" />
                       <span>Endpoint Routing & Snapshot History</span>
                     </h4>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {/* Historical Snapshot */}
-                      <div className="rounded-lg border border-slate-800 bg-slate-950/80 p-3.5 space-y-1.5">
+                      <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface-subtle)] p-3 space-y-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-medium text-slate-400">Historical Snapshot</span>
-                          <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-700">
-                            At Dispatch
-                          </Badge>
+                          <span className="text-[10px] font-mono uppercase text-[var(--text-dim)]">Snapshot at Dispatch</span>
+                          <span className="text-[10px] font-mono text-[var(--text-muted)]">Historical</span>
                         </div>
-                        <div className="text-sm font-medium text-slate-200">{deliveryDetail.endpointName}</div>
-                        <div className="font-mono text-xs text-blue-300 break-all select-all">
+                        <div className="text-xs font-semibold text-[var(--text-primary)]">{deliveryDetail.endpointName}</div>
+                        <div className="font-mono text-[11px] text-[var(--primary)] break-all select-all">
                           {deliveryDetail.destinationUrl}
                         </div>
                       </div>
 
                       {/* Current Live State */}
-                      <div className="rounded-lg border border-slate-800 bg-slate-950/80 p-3.5 space-y-1.5">
+                      <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface-subtle)] p-3 space-y-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-medium text-slate-400">Live Endpoint Status</span>
+                          <span className="text-[10px] font-mono uppercase text-[var(--text-dim)]">Current Live Endpoint</span>
                           {deliveryDetail.currentEndpoint?.isDeleted ? (
-                            <Badge className="bg-red-950/80 border-red-500/30 text-red-400 text-[10px]">
-                              Deleted
+                            <Badge variant="destructive" className="text-[9px] font-mono px-1 py-0">
+                              DELETED
                             </Badge>
                           ) : !deliveryDetail.currentEndpoint?.isEnabled ? (
-                            <Badge className="bg-amber-950/80 border-amber-500/30 text-amber-400 text-[10px]">
-                              Disabled
+                            <Badge variant="warning" className="text-[9px] font-mono px-1 py-0">
+                              DISABLED
                             </Badge>
                           ) : (
-                            <Badge className="bg-emerald-950/80 border-emerald-500/30 text-emerald-400 text-[10px]">
-                              Active
+                            <Badge variant="healthy" className="text-[9px] font-mono px-1 py-0">
+                              ACTIVE
                             </Badge>
                           )}
                         </div>
 
                         {deliveryDetail.currentEndpoint ? (
                           <>
-                            <div className="text-sm font-medium text-slate-200">
+                            <div className="text-xs font-semibold text-[var(--text-primary)]">
                               {deliveryDetail.currentEndpoint.name}
                             </div>
-                            <div className="font-mono text-xs text-slate-400 break-all select-all">
+                            <div className="font-mono text-[11px] text-[var(--text-secondary)] break-all select-all">
                               {deliveryDetail.currentEndpoint.url}
                             </div>
                             {deliveryDetail.currentEndpoint.url !== deliveryDetail.destinationUrl && (
-                              <div className="text-[11px] text-amber-400 flex items-center gap-1 pt-1">
+                              <div className="text-[10px] font-mono text-[var(--status-warning)] flex items-center gap-1 pt-1">
                                 <Info className="h-3 w-3 shrink-0" />
-                                <span>Destination URL has changed since this delivery</span>
+                                <span>URL changed since original delivery</span>
                               </div>
                             )}
                           </>
                         ) : (
-                          <div className="text-xs text-slate-500 italic pt-1">
+                          <div className="text-xs text-[var(--text-dim)] italic pt-1 font-mono">
                             Endpoint no longer exists in database.
                           </div>
                         )}
@@ -650,122 +746,142 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
 
                     {/* Replay Lineage Note if present */}
                     {deliveryDetail.replayOfId && (
-                      <div className="rounded-lg border border-purple-500/30 bg-purple-950/20 p-2.5 text-xs text-purple-300 flex items-center gap-2">
-                        <RotateCw className="h-4 w-4 shrink-0 text-purple-400" />
+                      <div className="rounded-[4px] border border-[var(--primary)]/30 bg-[var(--primary)]/10 p-2.5 text-xs text-[var(--primary)] flex items-center gap-2 font-mono">
+                        <RotateCw className="h-3.5 w-3.5 shrink-0" />
                         <span>
-                          This delivery was manually replayed from original delivery{' '}
-                          <strong className="font-mono">{deliveryDetail.replayOfId}</strong>.
+                          Replayed from original delivery:{' '}
+                          <strong className="select-all">{deliveryDetail.replayOfId}</strong>
                         </span>
                       </div>
                     )}
                   </div>
 
-                  {/* Section 2: Safe Event Payload Inspector */}
+                  {/* Section 2: Safe Payload & Response Inspector */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                        <Info className="h-3.5 w-3.5 text-blue-400" />
-                        <span>Dispatched Event Payload</span>
-                      </h4>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(
-                            JSON.stringify(deliveryDetail.event.payload, null, 2),
-                          );
-                          setCopiedPayload(true);
-                          setTimeout(() => setCopiedPayload(false), 2000);
-                        }}
-                        className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
-                      >
-                        {copiedPayload ? (
-                          <Check className="h-3.5 w-3.5 text-emerald-400" />
-                        ) : (
-                          <Copy className="h-3.5 w-3.5" />
+                    <div className="flex items-center justify-between border-b border-[var(--border)] pb-1.5">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setInspectorTab('payload')}
+                          className={`text-xs font-mono font-medium pb-1 border-b-2 transition-colors ${
+                            inspectorTab === 'payload'
+                              ? 'border-[var(--primary)] text-[var(--text-primary)]'
+                              : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                          }`}
+                        >
+                          Event Payload JSON
+                        </button>
+                        {deliveryDetail.latestAttempt?.responsePreview && (
+                          <button
+                            type="button"
+                            onClick={() => setInspectorTab('response')}
+                            className={`text-xs font-mono font-medium pb-1 border-b-2 transition-colors ${
+                              inspectorTab === 'response'
+                                ? 'border-[var(--primary)] text-[var(--text-primary)]'
+                                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                            }`}
+                          >
+                            Latest Response Preview
+                          </button>
                         )}
-                        <span>{copiedPayload ? 'Copied!' : 'Copy JSON'}</span>
-                      </button>
+                      </div>
+
+                      {inspectorTab === 'payload' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(
+                              JSON.stringify(deliveryDetail.event.payload, null, 2),
+                            );
+                            setCopiedPayload(true);
+                            setTimeout(() => setCopiedPayload(false), 2000);
+                          }}
+                          className="flex items-center gap-1 text-[11px] font-mono text-[var(--primary)] hover:underline"
+                        >
+                          {copiedPayload ? (
+                            <Check className="h-3 w-3 text-[var(--status-healthy)]" />
+                          ) : (
+                            <Copy className="h-3 w-3" />
+                          )}
+                          <span>{copiedPayload ? 'Copied' : 'Copy JSON'}</span>
+                        </button>
+                      )}
                     </div>
 
-                    <div className="rounded-lg border border-slate-800 bg-slate-950 p-3 max-h-56 overflow-y-auto">
-                      <pre className="font-mono text-xs text-emerald-300 break-words whitespace-pre-wrap select-all">
+                    {inspectorTab === 'payload' ? (
+                      <div className="rounded-[4px] border border-[var(--border)] bg-[var(--background)] p-3 max-h-52 overflow-auto font-mono text-xs text-[var(--text-primary)] select-all whitespace-pre-wrap break-words">
                         {JSON.stringify(deliveryDetail.event.payload, null, 2)}
-                      </pre>
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-[4px] border border-[var(--border)] bg-[var(--background)] p-3 max-h-52 overflow-auto font-mono text-xs text-[var(--text-secondary)] select-all whitespace-pre-wrap break-words">
+                        {deliveryDetail.latestAttempt?.responsePreview || 'No response body recorded.'}
+                      </div>
+                    )}
                   </div>
 
                   {/* Section 3: Chronological Attempt Timeline */}
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 text-blue-400" />
-                      <span>Attempt Timeline ({attempts.length} Attempt{attempts.length === 1 ? '' : 's'})</span>
+                  <div className="space-y-2.5">
+                    <h4 className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 text-[var(--primary)]" />
+                      <span>Execution Trace ({attempts.length} Attempt{attempts.length === 1 ? '' : 's'})</span>
                     </h4>
 
                     {attemptsLoading ? (
-                      <div className="py-6 text-center text-xs text-slate-500">
-                        Loading attempts timeline...
+                      <div className="py-6 text-center text-xs font-mono text-[var(--text-muted)]">
+                        Loading execution trace...
                       </div>
                     ) : attempts.length === 0 ? (
-                      <div className="p-4 rounded-lg bg-slate-950/60 border border-slate-800 text-xs text-slate-500 text-center">
-                        No execution attempts recorded yet (delivery is queued).
+                      <div className="p-3.5 rounded-[4px] bg-[var(--surface-subtle)] border border-[var(--border)] text-xs font-mono text-[var(--text-muted)] text-center">
+                        Zero execution attempts recorded yet (delivery is queued).
                       </div>
                     ) : (
-                      <div className="space-y-2.5">
+                      <div className="space-y-2">
                         {attempts.map((attempt) => (
                           <div
                             key={attempt.id}
-                            className="rounded-lg border border-slate-800 bg-slate-950/90 p-3 space-y-2"
+                            className="rounded-[4px] border border-[var(--border)] bg-[var(--surface-subtle)] p-3 space-y-1.5 font-mono"
                           >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                               <div className="flex items-center gap-2">
-                                <span className="font-semibold text-xs text-white">
+                                <span className="font-bold text-[var(--text-primary)]">
                                   Attempt #{attempt.attemptNumber}
                                 </span>
                                 <Badge
-                                  variant="outline"
-                                  className={`text-[10px] ${
+                                  variant={
                                     attempt.outcome === 'SUCCESS'
-                                      ? 'border-emerald-500/40 text-emerald-400'
+                                      ? 'healthy'
                                       : attempt.outcome === 'FAILED'
-                                      ? 'border-red-500/40 text-red-400'
-                                      : attempt.outcome === 'ABANDONED'
-                                      ? 'border-amber-500/40 text-amber-400'
-                                      : 'border-blue-500/40 text-blue-400'
-                                  }`}
+                                      ? 'destructive'
+                                      : 'outline'
+                                  }
+                                  className="text-[9px] px-1 py-0"
                                 >
                                   {attempt.outcome}
                                 </Badge>
                                 {attempt.httpStatus && (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[10px] font-mono border-slate-700 text-slate-300"
-                                  >
+                                  <span className="text-[10px] text-[var(--text-secondary)] tabular-nums">
                                     HTTP {attempt.httpStatus}
-                                  </Badge>
+                                  </span>
                                 )}
                               </div>
 
-                              <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                              <div className="text-[11px] text-[var(--text-muted)] flex items-center gap-2 tabular-nums">
                                 {attempt.durationMs !== null && (
                                   <span>{attempt.durationMs}ms</span>
                                 )}
-                                <span>{new Date(attempt.startedAt).toLocaleTimeString()}</span>
+                                <span>{formatExactDateTime(attempt.startedAt)}</span>
                               </div>
                             </div>
 
                             {attempt.errorCode && (
-                              <div className="text-xs text-red-400 font-mono">
+                              <div className="text-xs text-[var(--status-down)]">
                                 Error: {attempt.errorCode}
                               </div>
                             )}
 
                             {attempt.responsePreview && (
-                              <div className="space-y-1 pt-1">
-                                <span className="text-[10px] font-medium text-slate-500">Response Preview:</span>
-                                <div className="p-2 rounded bg-slate-900 border border-slate-800/80 font-mono text-[11px] text-slate-300 break-words max-h-24 overflow-y-auto">
-                                  {attempt.responsePreview}
-                                </div>
+                              <div className="text-[11px] text-[var(--text-dim)] truncate pt-0.5">
+                                Response: {attempt.responsePreview}
                               </div>
                             )}
                           </div>
@@ -778,11 +894,12 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between p-4 border-t border-slate-800 bg-slate-950/60">
+            <div className="flex items-center justify-between p-3.5 border-t border-[var(--border)] bg-[var(--surface-subtle)]">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setInspectingDeliveryId(null)}
+                className="font-mono text-xs"
               >
                 Close
               </Button>
@@ -795,10 +912,10 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
                     setInspectingDeliveryId(null);
                     openReplayModal(d);
                   }}
-                  className="bg-purple-600 hover:bg-purple-500 text-white gap-1.5"
+                  className="font-mono text-xs gap-1.5"
                 >
-                  <RotateCw className="h-3.5 w-3.5" />
-                  <span>Manual Replay</span>
+                  <RotateCw className="h-3 w-3" />
+                  <span>Replay Delivery</span>
                 </Button>
               )}
             </div>
@@ -806,82 +923,91 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
         </div>
       )}
 
-      {/* MODAL 2: MANUAL REPLAY CONFIRMATION */}
+      {/* MANUAL REPLAY CONFIRMATION MODAL */}
       {replayingDelivery && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-slate-900 border border-purple-500/30 rounded-xl shadow-2xl p-6 space-y-5">
+          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--border)] rounded-[6px] shadow-2xl p-5 space-y-4 font-sans">
             <div className="flex items-start gap-3">
-              <div className="p-2.5 rounded-lg bg-purple-950/60 border border-purple-500/30 text-purple-400 shrink-0">
-                <RotateCw className="h-6 w-6" />
+              <div className="p-2 rounded-[4px] bg-[var(--surface-active)] text-[var(--primary)] shrink-0">
+                <RotateCw className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-white">Confirm Manual Webhook Replay</h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Re-dispatches the exact historical event payload to the current endpoint destination.
+                <h3 className="text-sm font-semibold font-mono text-[var(--text-primary)]">
+                  Confirm Manual Webhook Replay
+                </h3>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  Re-dispatches the stored event payload to the destination endpoint.
                 </p>
               </div>
             </div>
 
-            {/* Warning Banner */}
-            <div className="rounded-lg border border-amber-500/30 bg-amber-950/20 p-3.5 text-xs text-amber-300 space-y-1.5">
-              <div className="flex items-center gap-1.5 font-semibold text-amber-200">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+            {/* Receiver Idempotency Warning */}
+            <div className="rounded-[4px] border border-[var(--status-warning)]/40 bg-[var(--status-warning-bg)]/20 p-3 text-xs text-[var(--status-warning)] space-y-1">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 <span>Receiver Idempotency Notice</span>
               </div>
-              <p className="leading-relaxed">
-                If the receiving server does not deduplicate requests using{' '}
-                <code className="bg-amber-950/80 px-1 py-0.5 rounded text-amber-100 font-mono">
+              <p className="text-[11px] leading-relaxed">
+                If the destination server does not deduplicate requests using the{' '}
+                <code className="bg-[var(--surface)] px-1 py-0.5 rounded-[2px] font-mono">
                   X-DevPulse-Event-Id
-                </code>
-                , this replay may trigger duplicate notifications or side-effects.
+                </code>{' '}
+                header, this replay will trigger duplicate webhook handling.
               </p>
             </div>
 
             {/* Target Summary */}
-            <div className="rounded-lg border border-slate-800 bg-slate-950 p-3.5 text-xs space-y-2">
+            <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface-subtle)] p-3 text-xs font-mono space-y-1.5">
               <div className="flex justify-between">
-                <span className="text-slate-400">Endpoint:</span>
-                <span className="text-slate-200 font-medium">{replayingDelivery.endpointName}</span>
+                <span className="text-[var(--text-muted)]">Endpoint:</span>
+                <span className="text-[var(--text-primary)] font-semibold">{replayingDelivery.endpointName}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Destination:</span>
-                <span className="font-mono text-blue-300 truncate max-w-xs">{replayingDelivery.destinationUrl}</span>
+                <span className="text-[var(--text-muted)]">Destination:</span>
+                <span className="text-[var(--primary)] truncate max-w-xs">{replayingDelivery.destinationUrl}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Original Event ID:</span>
-                <span className="font-mono text-slate-300">{replayingDelivery.eventId.slice(0, 16)}...</span>
+                <span className="text-[var(--text-muted)]">Original Event:</span>
+                <span className="text-[var(--text-secondary)]">{replayingDelivery.eventType || 'incident alert'}</span>
+              </div>
+              <div className="pt-1.5 text-[10px] text-[var(--text-muted)] space-y-0.5 border-t border-[var(--border-subtle)]">
+                <div>• Event ID &amp; payload: Reused unchanged (<code className="font-mono text-[var(--text-secondary)]">X-DevPulse-Event-Id</code>)</div>
+                <div>• Delivery ID: Fresh unique ID (<code className="font-mono text-[var(--text-secondary)]">X-DevPulse-Delivery-Id</code>)</div>
+                <div>• Signing: Re-signed with current endpoint secret and fresh timestamp</div>
               </div>
             </div>
 
             {replaySuccess && (
-              <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/30 p-3 text-xs text-emerald-300 flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+              <div className="rounded-[4px] border border-[var(--status-healthy)]/40 bg-[var(--status-healthy-bg)]/20 p-3 text-xs text-[var(--status-healthy)] flex items-center gap-2 font-mono">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
                 <span>{replaySuccess}</span>
               </div>
             )}
 
             {replayError && (
-              <div className="rounded-lg border border-red-500/30 bg-red-950/30 p-3 text-xs text-red-300 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+              <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3 text-xs text-[var(--status-down)] flex items-center gap-2 font-mono">
+                <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{replayError}</span>
               </div>
             )}
 
-            <div className="flex justify-end gap-3 pt-2 border-t border-slate-800">
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)] font-mono text-xs">
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => setReplayingDelivery(null)}
                 disabled={isReplaying}
               >
                 Cancel
               </Button>
               <Button
+                size="sm"
                 onClick={handleConfirmReplay}
                 disabled={isReplaying}
-                className="bg-purple-600 hover:bg-purple-500 text-white gap-2"
+                className="gap-1.5"
               >
-                <RotateCw className={`h-3.5 w-3.5 ${isReplaying ? 'animate-spin' : ''}`} />
-                <span>{isReplaying ? 'Accepting Replay...' : 'Dispatch Replay Now'}</span>
+                <RotateCw className={`h-3 w-3 ${isReplaying ? 'animate-spin' : ''}`} />
+                <span>{isReplaying ? 'Dispatching...' : 'Dispatch Replay'}</span>
               </Button>
             </div>
           </div>

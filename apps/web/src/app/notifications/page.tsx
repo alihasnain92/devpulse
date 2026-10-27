@@ -10,11 +10,11 @@ import { Navbar } from '@/components/navbar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { OperationalPageHeader } from '@/components/ui/operational-page-header';
 import {
   AlertCircle,
   AlertTriangle,
   Bell,
-  BellOff,
   Check,
   CheckCheck,
   CheckCircle2,
@@ -22,7 +22,36 @@ import {
   ChevronRight,
   Radio,
   RefreshCw,
+  Settings,
 } from 'lucide-react';
+
+function timeAgo(dateString: string): string {
+  const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatExactDate(dateString: string): string {
+  try {
+    const d = new Date(dateString);
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(d);
+  } catch {
+    return dateString;
+  }
+}
 
 export default function NotificationsPage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -124,8 +153,8 @@ export default function NotificationsPage() {
 
   if (authLoading || !user) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
-        <RefreshCw className="h-6 w-6 animate-spin" />
+      <div className="min-h-screen bg-[var(--background)] flex items-center justify-center text-[var(--text-muted)]">
+        <RefreshCw className="h-6 w-6 animate-spin text-[var(--primary)]" />
       </div>
     );
   }
@@ -133,87 +162,96 @@ export default function NotificationsPage() {
   const totalPages = Math.ceil(total / limit) || 1;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] flex flex-col font-sans">
       <Navbar />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800 pb-6">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
-                <Bell className="h-7 w-7 text-blue-500" />
-                <span>Notifications</span>
-              </h1>
-              {unreadCount > 0 && (
-                <Badge className="bg-red-600 hover:bg-red-500 text-white font-semibold px-2 py-0.5 text-xs">
-                  {unreadCount} unread
-                </Badge>
-              )}
-            </div>
-            <p className="text-slate-400 text-sm mt-1">
-              Real-time in-app alerts for incident creation and recovery across your monitored targets.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleMarkAllRead}
-              disabled={isMarkingAll || unreadCount === 0}
-              className="gap-2 border-slate-700 text-slate-300 hover:text-white"
-            >
-              {isMarkingAll ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <CheckCheck className="h-4 w-4 text-emerald-400" />
-              )}
-              <span>Mark all as read</span>
-            </Button>
-
-            <Link href="/settings">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Header */}
+        <OperationalPageHeader
+          eyebrow="Incident Alerts"
+          title="Notification Center"
+          description="In-app operational alerts generated on incident creation and verified automated recovery."
+          badge={
+            unreadCount > 0 ? (
+              <Badge variant="destructive" className="font-mono text-xs tabular-nums">
+                {unreadCount} unread
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="font-mono text-xs text-[var(--text-muted)]">
+                All read
+              </Badge>
+            )
+          }
+          actions={
+            <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-2 border-slate-700 text-slate-300 hover:text-white"
+                onClick={handleMarkAllRead}
+                disabled={isMarkingAll || unreadCount === 0}
+                className="gap-1.5 font-mono text-xs"
               >
-                <span>Alert Settings</span>
+                {isMarkingAll ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CheckCheck className="h-3.5 w-3.5 text-[var(--status-healthy)]" />
+                )}
+                <span>Mark all as read</span>
               </Button>
-            </Link>
+
+              <Link href="/settings">
+                <Button variant="secondary" size="sm" className="gap-1.5 font-mono text-xs">
+                  <Settings className="h-3.5 w-3.5" />
+                  <span>Preferences</span>
+                </Button>
+              </Link>
+            </div>
+          }
+        />
+
+        {/* Error Alert */}
+        {error && (
+          <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3.5 flex items-center justify-between gap-3 text-xs text-[var(--status-down)]">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => loadNotifications()} className="h-6 text-[11px]">
+              Retry
+            </Button>
           </div>
-        </div>
+        )}
 
         {/* Filter Controls */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex rounded-lg border border-slate-800 p-1 bg-slate-900/60">
+        <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] pb-3">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => {
                 setStatusFilter('all');
                 setPage(1);
               }}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`px-3 py-1.5 rounded-[4px] text-xs font-mono font-medium transition-colors ${
                 statusFilter === 'all'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-[var(--surface-active)] text-[var(--text-primary)] border border-[var(--border)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               }`}
             >
-              All Notifications
+              All Alerts ({total})
             </button>
             <button
               onClick={() => {
                 setStatusFilter('unread');
                 setPage(1);
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-xs font-mono font-medium transition-colors ${
                 statusFilter === 'unread'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-[var(--surface-active)] text-[var(--text-primary)] border border-[var(--border)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               }`}
             >
               <span>Unread</span>
               {unreadCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-red-600 text-white">
+                <span className="px-1.5 py-0.2 rounded-[2px] text-[10px] font-bold font-mono bg-[var(--status-down)] text-white tabular-nums">
                   {unreadCount}
                 </span>
               )}
@@ -223,53 +261,44 @@ export default function NotificationsPage() {
                 setStatusFilter('read');
                 setPage(1);
               }}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`px-3 py-1.5 rounded-[4px] text-xs font-mono font-medium transition-colors ${
                 statusFilter === 'read'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-[var(--surface-active)] text-[var(--text-primary)] border border-[var(--border)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               }`}
             >
               Read
             </button>
           </div>
 
-          <div className="text-xs text-slate-400">
+          <div className="text-xs font-mono text-[var(--text-muted)] hidden sm:block tabular-nums">
             {total} total {total === 1 ? 'alert' : 'alerts'}
           </div>
         </div>
 
-        {/* Error Alert */}
-        {error && (
-          <div className="p-4 rounded-lg bg-red-950/40 border border-red-800 text-red-300 text-sm flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 shrink-0 text-red-400" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* Notification List */}
+        {/* Notification Feed */}
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center p-16 text-slate-400">
-            <RefreshCw className="h-8 w-8 animate-spin text-blue-500 mb-3" />
-            <p className="text-sm">Fetching notifications...</p>
+          <div className="flex flex-col items-center justify-center p-16 text-[var(--text-muted)] space-y-2">
+            <RefreshCw className="h-6 w-6 animate-spin text-[var(--primary)]" />
+            <p className="text-xs font-mono">Fetching operational alert log...</p>
           </div>
         ) : notifications.length === 0 ? (
-          <Card className="bg-slate-900/60 border-slate-800 text-center py-16">
-            <CardContent className="flex flex-col items-center justify-center space-y-3">
-              <div className="h-12 w-12 rounded-full bg-slate-800/80 flex items-center justify-center text-slate-400">
-                <BellOff className="h-6 w-6" />
-              </div>
-              <h3 className="text-base font-semibold text-slate-200">
-                No notifications found
-              </h3>
-              <p className="text-xs text-slate-400 max-w-sm">
+          <Card className="border-dashed">
+            <CardContent className="py-16 text-center space-y-2 max-w-sm mx-auto">
+              <div className="text-sm font-semibold text-[var(--text-primary)]">
                 {statusFilter === 'unread'
-                  ? 'You are all caught up! No unread incident alerts.'
-                  : 'Alerts generated by monitor outages or recoveries will appear here.'}
+                  ? 'No unread notifications'
+                  : 'No notifications recorded'}
+              </div>
+              <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                {statusFilter === 'unread'
+                  ? 'You have caught up with all operational alerts.'
+                  : 'Automated alerts triggered by target outages or recoveries will appear here.'}
               </p>
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {notifications.map((notif) => {
               const isUnread = !notif.readAt;
               const isCreated = notif.type === 'INCIDENT_CREATED';
@@ -278,71 +307,72 @@ export default function NotificationsPage() {
               return (
                 <div
                   key={notif.id}
-                  className={`p-4 rounded-lg border transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                  className={`p-3.5 sm:p-4 rounded-[4px] border transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                     isUnread
-                      ? 'bg-slate-900/90 border-blue-900/50 shadow-sm'
-                      : 'bg-slate-950/40 border-slate-800/80 text-slate-300'
+                      ? 'bg-[var(--surface)] border-[var(--border)] border-l-2 border-l-[var(--primary)]'
+                      : 'bg-[var(--surface-subtle)] border-[var(--border-subtle)] opacity-85'
                   }`}
                 >
-                  <div className="flex items-start gap-3.5 flex-1 min-w-0">
-                    {/* Status Icon */}
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    {/* Operational Type Icon */}
                     <div
-                      className={`h-9 w-9 rounded-lg shrink-0 flex items-center justify-center mt-0.5 ${
+                      className={`h-7 w-7 rounded-[4px] shrink-0 flex items-center justify-center mt-0.5 border ${
                         isCreated
-                          ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                          ? 'bg-[var(--status-down-bg)]/25 text-[var(--status-down)] border-[var(--status-down)]/30'
                           : isResolved
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                            ? 'bg-[var(--status-healthy-bg)]/25 text-[var(--status-healthy)] border-[var(--status-healthy)]/30'
+                            : 'bg-[var(--surface-active)] text-[var(--primary)] border-[var(--border)]'
                       }`}
                     >
                       {isCreated ? (
-                        <AlertTriangle className="h-5 w-5" />
+                        <AlertTriangle className="h-4 w-4" />
                       ) : isResolved ? (
-                        <CheckCircle2 className="h-5 w-5" />
+                        <CheckCircle2 className="h-4 w-4" />
                       ) : (
-                        <Bell className="h-5 w-5" />
+                        <Bell className="h-4 w-4" />
                       )}
                     </div>
 
                     <div className="space-y-1 min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm text-white truncate">
+                        <span
+                          className={`font-semibold text-xs sm:text-sm truncate ${
+                            isUnread ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+                          }`}
+                        >
                           {notif.title}
                         </span>
                         {isUnread && (
-                          <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)] shrink-0" />
                         )}
                       </div>
-                      <p className="text-xs text-slate-300 leading-relaxed break-words">
+
+                      <p className="text-xs font-mono text-[var(--text-secondary)] leading-relaxed break-words">
                         {notif.message}
                       </p>
-                      <div className="flex items-center gap-3 text-[11px] text-slate-400 pt-1">
-                        <span>
-                          {new Date(notif.createdAt).toLocaleString(undefined, {
-                            dateStyle: 'medium',
-                            timeStyle: 'short',
-                          })}
-                        </span>
+
+                      <div className="flex items-center gap-3 text-[11px] font-mono text-[var(--text-muted)] pt-0.5">
+                        <span>{timeAgo(notif.createdAt)} ({formatExactDate(notif.createdAt)})</span>
                         {notif.readAt && (
-                          <span className="text-slate-500">
-                            • Read {new Date(notif.readAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          <span className="text-[var(--text-dim)]">
+                            • Read {timeAgo(notif.readAt)}
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                  {/* Operational Actions */}
+                  <div className="flex items-center gap-2 self-end sm:self-center shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-[var(--border-subtle)]">
                     {notif.monitorId && (
                       <Link href={`/monitors/${notif.monitorId}`}>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 text-xs gap-1.5 text-slate-300 hover:text-white"
+                          className="h-7 text-xs font-mono gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                         >
-                          <Radio className="h-3.5 w-3.5 text-blue-400" />
-                          <span>View Monitor</span>
+                          <Radio className="h-3 w-3 text-[var(--primary)]" />
+                          <span>Target</span>
                         </Button>
                       </Link>
                     )}
@@ -353,12 +383,12 @@ export default function NotificationsPage() {
                         size="sm"
                         disabled={markingReadId === notif.id}
                         onClick={() => handleMarkRead(notif.id)}
-                        className="h-8 text-xs gap-1.5 border-slate-700 text-slate-300 hover:text-white"
+                        className="h-7 text-xs font-mono gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                       >
                         {markingReadId === notif.id ? (
-                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          <RefreshCw className="h-3 w-3 animate-spin" />
                         ) : (
-                          <Check className="h-3.5 w-3.5 text-blue-400" />
+                          <Check className="h-3 w-3 text-[var(--primary)]" />
                         )}
                         <span>Mark read</span>
                       </Button>
@@ -372,8 +402,8 @@ export default function NotificationsPage() {
 
         {/* Pagination Footer */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-slate-800 pt-4">
-            <div className="text-xs text-slate-400">
+          <div className="flex items-center justify-between border-t border-[var(--border)] pt-4">
+            <div className="text-xs font-mono text-[var(--text-muted)] tabular-nums">
               Page {page} of {totalPages} ({total} alerts)
             </div>
 
@@ -383,7 +413,7 @@ export default function NotificationsPage() {
                 size="sm"
                 disabled={page <= 1 || isLoading}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="gap-1 border-slate-700 text-xs"
+                className="gap-1 font-mono text-xs"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
                 <span>Previous</span>
@@ -393,7 +423,7 @@ export default function NotificationsPage() {
                 size="sm"
                 disabled={!hasMore || isLoading}
                 onClick={() => setPage((p) => p + 1)}
-                className="gap-1 border-slate-700 text-xs"
+                className="gap-1 font-mono text-xs"
               >
                 <span>Next</span>
                 <ChevronRight className="h-3.5 w-3.5" />
