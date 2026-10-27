@@ -25,6 +25,8 @@ import {
   NOTIFICATION_EMAIL_LEASE_CONFIG,
   NOTIFICATION_EMAIL_RETRY_CONFIG,
   NOTIFICATION_PAGINATION_CONFIG,
+  RATE_LIMIT_HEADERS,
+  RATE_LIMIT_POLICIES,
 } from './constants';
 
 describe('Shared Constants', () => {
@@ -192,6 +194,32 @@ describe('Shared Constants', () => {
 
       expect(NOTIFICATION_PAGINATION_CONFIG.DEFAULT_LIMIT).toBe(25);
       expect(NOTIFICATION_PAGINATION_CONFIG.MAX_LIMIT).toBe(100);
+    });
+
+    it('should define rate limit headers and policy constants', () => {
+      expect(RATE_LIMIT_HEADERS.LIMIT).toBe('X-RateLimit-Limit');
+      expect(RATE_LIMIT_HEADERS.REMAINING).toBe('X-RateLimit-Remaining');
+      expect(RATE_LIMIT_HEADERS.RESET).toBe('X-RateLimit-Reset');
+      expect(RATE_LIMIT_HEADERS.RETRY_AFTER).toBe('Retry-After');
+
+      expect(RATE_LIMIT_POLICIES.AUTH_LOGIN.limit).toBe(5);
+      expect(RATE_LIMIT_POLICIES.AUTH_LOGIN.ttlMs).toBe(60000);
+      expect(RATE_LIMIT_POLICIES.AUTH_REGISTER.limit).toBe(5);
+      expect(RATE_LIMIT_POLICIES.AUTH_REGISTER.ttlMs).toBe(600000);
+      expect(RATE_LIMIT_POLICIES.AUTH_REFRESH.limit).toBe(30);
+
+      expect(RATE_LIMIT_POLICIES.USER_READ.limit).toBe(120);
+      expect(RATE_LIMIT_POLICIES.USER_WRITE.limit).toBe(60);
+      expect(RATE_LIMIT_POLICIES.API_KEY.limit).toBe(120);
+
+      expect(RATE_LIMIT_POLICIES.MONITOR_CHECK_USER.limit).toBe(10);
+      expect(RATE_LIMIT_POLICIES.MONITOR_CHECK_TARGET.limit).toBe(3);
+
+      expect(RATE_LIMIT_POLICIES.WEBHOOK_MUTATION.limit).toBe(30);
+      expect(RATE_LIMIT_POLICIES.WEBHOOK_REPLAY_USER.limit).toBe(10);
+      expect(RATE_LIMIT_POLICIES.WEBHOOK_REPLAY_DELIVERY.limit).toBe(5);
+
+      expect(RATE_LIMIT_POLICIES.NOTIFICATION_MUTATION.limit).toBe(60);
     });
   });
 });

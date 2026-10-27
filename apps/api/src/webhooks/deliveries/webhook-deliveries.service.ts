@@ -1,13 +1,17 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import {
   PaginatedWebhookDeliveriesDto,
+  RATE_LIMIT_POLICIES,
   ReplayWebhookDeliveryResponseDto,
   WEBHOOK_DELIVERY_ORIGIN,
   WEBHOOK_DELIVERY_STATUS,
@@ -24,6 +28,7 @@ import {
 } from '@devpulse/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WebhookDeliveryService } from '../delivery/webhook-delivery.service';
+import { RateLimiterService } from '../../rate-limiting/rate-limiter.service';
 import { QueryWebhookDeliveriesDto } from './dto/query-deliveries.dto';
 
 interface DeliveryRecordWithEvent {
@@ -55,6 +60,8 @@ export class WebhookDeliveriesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly deliveryService: WebhookDeliveryService,
+    @Optional()
+    private readonly rateLimiterService?: RateLimiterService,
   ) {}
 
   /**
@@ -316,13 +323,42 @@ export class WebhookDeliveriesService {
       );
     }
 
+    // 4. Atomic rate limiting check (user quota + delivery quota without partial consumption)
+    if (this.rateLimiterService) {
+      const replayRes = await this.rateLimiterService.checkMultiRateLimit([
+        {
+          key: `rl:replay:user:${userId}`,
+          limit: RATE_LIMIT_POLICIES.WEBHOOK_REPLAY_USER.limit,
+          windowMs: RATE_LIMIT_POLICIES.WEBHOOK_REPLAY_USER.ttlMs,
+        },
+        {
+          key: `rl:replay:del:${deliveryId}`,
+          limit: RATE_LIMIT_POLICIES.WEBHOOK_REPLAY_DELIVERY.limit,
+          windowMs: RATE_LIMIT_POLICIES.WEBHOOK_REPLAY_DELIVERY.ttlMs,
+        },
+      ]);
+
+      if (!replayRes.allowed) {
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.TOO_MANY_REQUESTS,
+            message:
+              'Too many manual replay requests. Please wait before retrying.',
+            error: 'Too Many Requests',
+            retryAfter: replayRes.retryAfter,
+          },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    }
+
     // Root delivery lineage: if replaying a previous replay, point directly to root delivery
     const rootDeliveryId = original.replayOfId || original.id;
 
-    // 4. Create new replay delivery with origin MANUAL_REPLAY and snapshot current endpoint state
-    let replayDelivery: any;
+    // 5. Create new replay delivery with origin MANUAL_REPLAY and snapshot current endpoint state
+    let replayDelivery: DeliveryRecordWithEvent;
     try {
-      replayDelivery = await this.prisma.webhookDelivery.create({
+      replayDelivery = (await this.prisma.webhookDelivery.create({
         data: {
           eventId: original.eventId,
           endpointId: original.endpointId,
@@ -339,7 +375,7 @@ export class WebhookDeliveriesService {
             select: { type: true },
           },
         },
-      });
+      })) as unknown as DeliveryRecordWithEvent;
     } catch (err: unknown) {
       // Race condition defense: another request completed the create concurrently
       const concurrent = await this.prisma.webhookDelivery.findFirst({

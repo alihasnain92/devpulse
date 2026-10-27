@@ -15,11 +15,13 @@ import {
   NotificationDto,
   NotificationPreferenceDto,
   PaginatedNotificationsDto,
+  RATE_LIMIT_POLICIES,
   UnreadNotificationCountDto,
 } from '@devpulse/shared';
 import { CurrentUser, AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import { CsrfGuard } from '../auth/guards/csrf.guard';
 import { RequireScopes } from '../api-keys/decorators/require-scopes.decorator';
+import { RateLimit } from '../rate-limiting/rate-limit.decorator';
 import { NotificationsService } from './notifications.service';
 import { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
 import { QueryNotificationsDto } from './dto/query-notifications.dto';
@@ -38,6 +40,7 @@ export class NotificationsController {
   }
 
   @RequireScopes('notifications:write')
+  @RateLimit(RATE_LIMIT_POLICIES.NOTIFICATION_MUTATION)
   @Patch('preferences')
   updatePreferences(
     @CurrentUser() user: AuthenticatedUser,
@@ -64,6 +67,7 @@ export class NotificationsController {
   }
 
   @RequireScopes('notifications:write')
+  @RateLimit(RATE_LIMIT_POLICIES.NOTIFICATION_MUTATION)
   @Patch(':id/read')
   markRead(
     @CurrentUser() user: AuthenticatedUser,
@@ -73,6 +77,7 @@ export class NotificationsController {
   }
 
   @RequireScopes('notifications:write')
+  @RateLimit(RATE_LIMIT_POLICIES.NOTIFICATION_MUTATION)
   @Post('read-all')
   @HttpCode(HttpStatus.OK)
   markAllRead(

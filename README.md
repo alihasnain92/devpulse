@@ -312,9 +312,25 @@ All integration and smoke tests dynamically reroute database connections to `dev
    - Strict IP classification preventing internal loopback, private RFC1918 subnets, link-local, and cloud metadata access.
    - Socket-level IP pinning on both health checks and webhook dispatches, neutralizing DNS rebinding attacks.
    - Strict no-redirect policy on webhook deliveries: HTTP 3xx responses are treated as delivery failures and never followed.
-3. **Resilience & Rate Limiting**:
-   - Outbound probe timeouts (1-30s) and max response payload limits (100KB for probes, 1KB preview for webhooks).
-   - Structured error handling with zero internal stack trace exposure.
+3. **Resilience & Distributed Rate Limiting (Sliding Window)**:
+   - High-precision sliding-window rate limiting implemented with atomic Redis Lua scripts (`ZREMRANGEBYSCORE`, `ZCARD`, `ZADD`, `PEXPIRE`, `ZRANGE`). Requests are recorded with unique server-generated member IDs (`<nowMs>:<uuid>`) ensuring accurate counting under same-millisecond concurrency.
+   - Standardized rate limit response headers emitted on both allowed and throttled requests: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` (HTTP 429).
+   - **Multi-Tier Policy Matrix**:
+     - `auth.login`: 5 attempts / min per IP:SHA256(email) and 20 / min per IP (prevents credential stuffing while preserving privacy with zero raw password/email logging).
+     - `auth.register`: 5 registrations / 10 min per IP:SHA256(email) and 15 / 10 min per IP.
+     - `auth.refresh`: 30 token rotations / min per IP.
+     - `user.read`: 120 queries / min per authenticated user.
+     - `user.write`: 60 mutations / min per authenticated user (independent bucket from reads).
+     - `api.key`: 120 operations / min per API Key ID (never storing or leaking raw keys in cache).
+     - `monitor.manual_check`: Atomic dual-key throttling — 10 checks / min per actor AND 3 checks / min per target monitor (prevents external probe DDoS bursts without asymmetric quota depletion).
+     - `webhook.mutation`: 30 endpoint create/update/delete operations / min.
+     - `webhook.replay`: 10 replays / min per user AND 5 replays / min per delivery. Idempotent retries (identical `Idempotency-Key`) bypass specialized manual replay quotas (`rl:replay:user` and `rl:replay:del`) and return previously accepted records without consuming replay quota, while standard authentication, authorization, and general API rate limits still protect the server ingress.
+     - `notification.mutation`: 60 preference updates or read acknowledgments / min.
+   - **Degradation & Fail-Closed Policies**:
+     - **Distributed vs. Process-Local**: When Redis is available, rate limits are globally synchronized across all nodes. Under Redis outages, standard routes degrade to a process-local bounded in-memory sliding window (max 5,000 keys with LRU eviction) to keep the REST API operational; note that in-process state is local to each replica and not shared across horizontal nodes.
+     - **Fail-Closed for Sensitive Auth**: Sensitive authentication routes fail closed with HTTP 503 Service Unavailable when Redis is unreachable, preventing credential stuffing attacks during infrastructure failure without falsely indicating quota exhaustion.
+   - **Explicit Reverse-Proxy IP Parsing**: Client IP is extracted via direct socket connection by default (`TRUST_PROXY=false`). When `TRUST_PROXY=true` is explicitly configured, exactly one trusted upstream proxy hop is assumed.
+   - **Strict Input & Environment Validation**: 100 KB payload size limit across all REST endpoints prevents memory exhaustion. Startup environment checks validate critical secrets without logging or exposing secret strings.
 4. **Webhook Security & HMAC Verification**:
    - Webhook signing secrets are encrypted at rest with AES-256-GCM.
    - Outbound delivery headers include `x-devpulse-signature: t=${timestamp},v1=${signature}` computed using HMAC-SHA256.
@@ -339,7 +355,7 @@ All integration and smoke tests dynamically reroute database connections to `dev
 - [x] **Reliable Webhook Event Delivery Pipeline (Phase 8)**: Transactional outbox pattern, BullMQ delivery queue, socket-pinned delivery-time SSRF defenses, strict no-redirect policy, exponential backoff with jitter (up to 6 attempts), and durable attempt history.
 - [x] **Webhook Delivery History, Attempt Inspection & Manual Replay (Phase 9)**: Delivery history UI, attempt timeline inspection with response previews, endpoint soft deletion, and idempotent manual replay with lineage tracking.
 - [x] **Email & In-App Incident Notifications (Phase 10)**: Transactional notification and email outbox generation, pluggable SMTP email provider, responsive HTML & text email templates, in-app notification center with unread badges, filter tabs, bulk read operations, and scoped API keys (`notifications:read`, `notifications:write`).
-- [ ] **Rate Limiting & Final Hardening (Phase 11)**: API rate limiting, API-key abuse protection / quotas, Redis-backed distributed throttling, idempotency review and enforcement, webhook/event ingestion limits, authentication/authorization hardening, CSRF review, API-key scope review, HMAC verification/signing review, SSRF protections review, tenant-isolation audit, webhook replay protections, notification/email abuse protections, failure/recovery testing, final Level 2 documentation, and final CI/release verification.
+- [x] **Rate Limiting & Final Hardening (Phase 11)**: API rate limiting, API-key abuse protection / quotas, Redis-backed distributed throttling, idempotency review and enforcement, webhook/event ingestion limits, authentication/authorization hardening, CSRF review, API-key scope review, HMAC verification/signing review, SSRF protections review, tenant-isolation audit, webhook replay protections, notification/email abuse protections, failure/recovery testing, final Level 2 documentation, and final CI/release verification.
 
 ---
 

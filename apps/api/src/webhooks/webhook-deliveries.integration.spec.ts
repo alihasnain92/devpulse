@@ -13,6 +13,7 @@ import { AppModule } from '../app.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { WebhookOutboxPublisherService } from './outbox/webhook-outbox-publisher.service';
 import { WebhookDeliveryService } from './delivery/webhook-delivery.service';
+import { RateLimiterService } from '../rate-limiting/rate-limiter.service';
 
 describe('Webhook Deliveries & Replay API (Integration - Live PostgreSQL)', () => {
   let app: INestApplication;
@@ -206,6 +207,20 @@ describe('Webhook Deliveries & Replay API (Integration - Live PostgreSQL)', () =
       // Ignore cleanup error
     }
     await app.close();
+  });
+
+  beforeEach(async () => {
+    if (app && userAId) {
+      try {
+        const rateLimiter = app.get(RateLimiterService);
+        await rateLimiter.resetLimit(`rl:replay:user:${userAId}`);
+        if (deliveryA1Id) {
+          await rateLimiter.resetLimit(`rl:replay:del:${deliveryA1Id}`);
+        }
+      } catch {
+        // Ignore
+      }
+    }
   });
 
   describe('GET /webhooks/deliveries (Listing & Filtering)', () => {

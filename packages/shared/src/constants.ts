@@ -191,3 +191,91 @@ export const API_KEY_CONFIG = {
   DISPLAY_PREFIX_LENGTH: 12,
   MAX_KEYS_PER_USER: 10,
 } as const;
+
+export const RATE_LIMIT_HEADERS = {
+  LIMIT: 'X-RateLimit-Limit',
+  REMAINING: 'X-RateLimit-Remaining',
+  RESET: 'X-RateLimit-Reset',
+  RETRY_AFTER: 'Retry-After',
+} as const;
+
+export const RATE_LIMIT_POLICIES = {
+  // Authentication endpoints
+  AUTH_LOGIN: {
+    ttlMs: 60 * 1000, // 1 minute
+    limit: 5,
+    ipLimit: 20,
+    keyPrefix: 'rl:auth:login',
+  },
+  AUTH_REGISTER: {
+    ttlMs: 10 * 60 * 1000, // 10 minutes
+    limit: 5,
+    ipLimit: 15,
+    keyPrefix: 'rl:auth:register',
+  },
+  AUTH_REFRESH: {
+    ttlMs: 60 * 1000, // 1 minute
+    limit: 30,
+    keyPrefix: 'rl:auth:refresh',
+  },
+
+  // Authenticated user standard endpoints
+  USER_READ: {
+    ttlMs: 60 * 1000, // 1 minute
+    limit: 120,
+    keyPrefix: 'rl:user:read',
+  },
+  USER_WRITE: {
+    ttlMs: 60 * 1000, // 1 minute
+    limit: 60,
+    keyPrefix: 'rl:user:write',
+  },
+
+  // Programmatic API Keys
+  API_KEY: {
+    ttlMs: 60 * 1000, // 1 minute
+    limit: 120,
+    keyPrefix: 'rl:api-key',
+  },
+
+  // Monitor manual check
+  MONITOR_CHECK_USER: {
+    ttlMs: 60 * 1000, // 1 minute
+    limit: 10,
+    keyPrefix: 'rl:monitor:check:user',
+  },
+  MONITOR_CHECK_TARGET: {
+    ttlMs: 60 * 1000, // 1 minute
+    limit: 3,
+    keyPrefix: 'rl:monitor:check:target',
+  },
+
+  // Webhook management mutations
+  WEBHOOK_MUTATION: {
+    ttlMs: 60 * 1000, // 1 minute
+    limit: 30,
+    keyPrefix: 'rl:webhook:mutation',
+  },
+
+  // Webhook manual replay
+  WEBHOOK_REPLAY_USER: {
+    ttlMs: 60 * 1000, // 1 minute
+    limit: 10,
+    keyPrefix: 'rl:replay:user',
+  },
+  WEBHOOK_REPLAY_DELIVERY: {
+    ttlMs: 60 * 1000, // 1 minute
+    limit: 5,
+    keyPrefix: 'rl:replay:del',
+  },
+
+  // Notification mutations
+  NOTIFICATION_MUTATION: {
+    ttlMs: 60 * 1000, // 1 minute
+    limit: 60,
+    keyPrefix: 'rl:notification:mutation',
+  },
+} as const;
+
+export type RateLimitPolicyKey = keyof typeof RATE_LIMIT_POLICIES;
+export type RateLimitPolicy = (typeof RATE_LIMIT_POLICIES)[RateLimitPolicyKey];
