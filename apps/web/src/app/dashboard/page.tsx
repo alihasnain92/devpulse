@@ -73,9 +73,10 @@ export default function DashboardPage() {
       setIncidents(incidentsData);
       setSummary(summaryData);
 
-      // Fetch latest check for each monitor in parallel
+      // Fetch latest check only for visible monitors (first 6) to avoid unbounded fan-out
+      const visibleMonitors = monitorsData.slice(0, 6);
       const checkResults = await Promise.all(
-        monitorsData.map(async (m) => {
+        visibleMonitors.map(async (m) => {
           const chk = await apiClient.getLatestCheck(m.id).catch(() => null);
           return [m.id, chk] as const;
         }),
@@ -101,42 +102,14 @@ export default function DashboardPage() {
     }
   }, [authLoading]);
 
-  // Derived operational values
-  const totalMonitors = monitors.length;
-  const activeMonitors = monitors.filter((m) => !m.isPaused).length;
-  const pausedMonitors = monitors.filter((m) => m.isPaused).length;
+  // Derived operational values (preferring authoritative backend summary)
+  const totalMonitors = summary?.totalMonitors ?? monitors.length;
+  const activeMonitors = summary?.activeMonitors ?? monitors.filter((m) => !m.isPaused).length;
+  const pausedMonitors = summary?.pausedMonitors ?? monitors.filter((m) => m.isPaused).length;
 
-  let passingCount = 0;
-  let failingCount = 0;
-  let neverCheckedCount = 0;
-
-  for (const m of monitors) {
-    const chk = latestChecks[m.id];
-    if (!chk) {
-      neverCheckedCount++;
-    } else if (chk.isSuccess) {
-      passingCount++;
-    } else {
-      failingCount++;
-    }
-  }
-
-  // Filter active monitors to derive real-time active health
-  const activeMonitorsList = monitors.filter((m) => !m.isPaused);
-  let activePassingCount = 0;
-  let activeFailingCount = 0;
-  let activePendingCount = 0;
-
-  for (const m of activeMonitorsList) {
-    const chk = latestChecks[m.id];
-    if (!chk) {
-      activePendingCount++;
-    } else if (chk.isSuccess) {
-      activePassingCount++;
-    } else {
-      activeFailingCount++;
-    }
-  }
+  const passingCount = summary?.passingEndpoints ?? 0;
+  const failingCount = summary?.failingEndpoints ?? 0;
+  const neverCheckedCount = summary?.neverCheckedEndpoints ?? 0;
 
   const activeIncidents = incidents.filter((i) => !i.isResolved);
   const resolvedIncidents = incidents.filter((i) => i.isResolved);
@@ -144,8 +117,7 @@ export default function DashboardPage() {
   // Global health determination across operational states
   const hasOutages =
     activeIncidents.length > 0 ||
-    (summary?.failingEndpoints ?? failingCount) > 0 ||
-    activeFailingCount > 0;
+    (summary?.failingEndpoints ?? failingCount) > 0;
 
   let globalHealthStatus: OperationalStatus = 'healthy';
   let globalHealthLabel = 'Monitored services operational';
@@ -159,10 +131,10 @@ export default function DashboardPage() {
   } else if (activeMonitors === 0) {
     globalHealthStatus = 'disabled';
     globalHealthLabel = 'All monitors paused';
-  } else if (activePassingCount === 0 && activePendingCount > 0) {
+  } else if (passingCount === 0 && neverCheckedCount > 0) {
     globalHealthStatus = 'info';
     globalHealthLabel = 'Awaiting health data';
-  } else if (activePendingCount > 0) {
+  } else if (neverCheckedCount > 0) {
     globalHealthStatus = 'info';
     globalHealthLabel = 'Health data pending';
   } else {
@@ -198,7 +170,6 @@ export default function DashboardPage() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Header */}
         <OperationalPageHeader
-          eyebrow="Reliability Overview"
           title="System Dashboard"
           description={`Monitored operational environment for ${user?.email || 'authenticated user'}.`}
           badge={
@@ -269,7 +240,9 @@ export default function DashboardPage() {
               <span className="font-medium text-[var(--text-primary)]">Demonstration Mode Active:</span>
               <span className="truncate">Sample metrics and seeded records are active for showcase purposes.</span>
             </div>
-            <span className="text-[10px] font-mono text-[var(--text-muted)] shrink-0 ml-2">SIMULATED DATA</span>
+            <Badge variant="outline" className="border-[var(--border-subtle)] bg-[var(--surface-subtle)] text-[var(--text-muted)] text-[10px] font-mono px-1.5 py-0.5 shrink-0 ml-2">
+              SIMULATED DATA
+            </Badge>
           </div>
         )}
 
@@ -288,7 +261,31 @@ export default function DashboardPage() {
 
         {/* Asymmetric Operational Health Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Primary Metric: System 24h Uptime */}
+          {/* Urgent / Status Metric: Active Outages */}
+          <MetricCard
+            label="ACTIVE OUTAGES"
+            value={summary?.activeIncidents ?? activeIncidents.length}
+            subvalue={
+              (summary?.activeIncidents ?? activeIncidents.length) > 0
+                ? 'Services requiring immediate response'
+                : 'Zero active outages detected'
+            }
+            variant={(summary?.activeIncidents ?? activeIncidents.length) > 0 ? 'urgent' : 'healthy'}
+            badge={
+              (summary?.activeIncidents ?? activeIncidents.length) > 0 ? (
+                <Badge variant="destructive" className="text-[10px] font-mono px-1 py-0">
+                  ACTION NEEDED
+                </Badge>
+              ) : (
+                <Badge variant="healthy" className="text-[10px] font-mono px-1 py-0">
+                  CALM
+                </Badge>
+              )
+            }
+            icon={AlertTriangle}
+          />
+
+          {/* Primary Reliability Metric: System 24h Uptime */}
           <MetricCard
             label="SYSTEM UPTIME (24H)"
             value={
@@ -303,26 +300,15 @@ export default function DashboardPage() {
             icon={Activity}
           />
 
-          {/* Urgent / Status Metric: Active Outages */}
+          {/* Health Status Metric: Endpoint Health */}
           <MetricCard
-            label="ACTIVE OUTAGES"
-            value={summary?.activeIncidents ?? activeIncidents.length}
-            subvalue={
-              (summary?.activeIncidents ?? activeIncidents.length) > 0
-                ? 'Services requiring immediate investigation'
-                : 'Zero active outages reported'
-            }
-            variant={(summary?.activeIncidents ?? activeIncidents.length) > 0 ? 'urgent' : 'default'}
-            badge={
-              (summary?.activeIncidents ?? activeIncidents.length) > 0 ? (
-                <Badge variant="destructive" className="text-[10px] font-mono px-1 py-0">
-                  ACTION NEEDED
-                </Badge>
-              ) : (
-                <Badge variant="healthy" className="text-[10px] font-mono px-1 py-0">
-                  CALM
-                </Badge>
-              )
+            label="HEALTH STATUS"
+            value={`${summary?.passingEndpoints ?? passingCount} / ${
+              summary?.totalMonitors ?? totalMonitors
+            }`}
+            subvalue={`${summary?.failingEndpoints ?? failingCount} failing • ${summary?.neverCheckedEndpoints ?? neverCheckedCount} pending`}
+            variant={
+              (summary?.failingEndpoints ?? failingCount) > 0 ? 'urgent' : 'default'
             }
           />
 
@@ -335,18 +321,6 @@ export default function DashboardPage() {
             } paused`}
             icon={Radio}
           />
-
-          {/* Health Status Metric: Endpoint Health */}
-          <MetricCard
-            label="HEALTH STATUS"
-            value={`${summary?.passingEndpoints ?? passingCount} / ${
-              summary?.totalMonitors ?? totalMonitors
-            }`}
-            subvalue={`${summary?.failingEndpoints ?? failingCount} failing • ${summary?.neverCheckedEndpoints ?? neverCheckedCount} pending`}
-            variant={
-              (summary?.failingEndpoints ?? failingCount) > 0 ? 'urgent' : 'default'
-            }
-          />
         </div>
 
         {/* Operational Views: Monitors Overview (2 cols) & Incidents (1 col) */}
@@ -358,7 +332,7 @@ export default function DashboardPage() {
                 <div>
                   <CardTitle>Monitors Overview</CardTitle>
                   <CardDescription>
-                    Real-time operational status and latest execution results.
+                    Operational status and latest execution results.
                   </CardDescription>
                 </div>
                 <Link href="/monitors">

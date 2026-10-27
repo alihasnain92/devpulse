@@ -20,6 +20,7 @@ import { apiClient, ApiClientError } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ModalDialog } from '@/components/ui/modal-dialog';
 import {
   AlertCircle,
   AlertTriangle,
@@ -34,7 +35,6 @@ import {
   RefreshCw,
   RotateCw,
   Shield,
-  X,
   XCircle,
 } from 'lucide-react';
 
@@ -639,308 +639,283 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
       </div>
 
       {/* DELIVERY INSPECTION MODAL */}
-      {inspectingDeliveryId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-3xl max-h-[90vh] flex flex-col bg-[var(--surface)] border border-[var(--border)] rounded-[6px] shadow-2xl overflow-hidden font-sans">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-[var(--border)] bg-[var(--surface-subtle)]">
-              <div className="flex items-center gap-2.5">
-                <History className="h-4 w-4 text-[var(--primary)] shrink-0" />
-                <div>
-                  <h3 className="text-sm font-semibold font-mono text-[var(--text-primary)] flex items-center gap-2">
-                    <span>Delivery Inspector</span>
-                    {deliveryDetail && renderStatusBadge(deliveryDetail.status)}
-                    {deliveryDetail && renderOriginBadge(deliveryDetail.origin)}
-                  </h3>
-                  <p className="font-mono text-[11px] text-[var(--text-muted)] mt-0.5 select-all">
-                    ID: {inspectingDeliveryId}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setInspectingDeliveryId(null)}
-                className="p-1 rounded-[2px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                aria-label="Close delivery inspector"
-              >
-                <X className="h-4 w-4" />
-              </button>
+      <ModalDialog
+        isOpen={Boolean(inspectingDeliveryId)}
+        onClose={() => setInspectingDeliveryId(null)}
+        title="Delivery Inspector"
+        description={inspectingDeliveryId ? `Delivery Record ID: ${inspectingDeliveryId}` : undefined}
+        maxWidth="max-w-3xl"
+        showCloseButton={true}
+      >
+        <div className="space-y-5 font-sans max-h-[75vh] overflow-y-auto pr-1">
+          {deliveryDetail && (
+            <div className="flex items-center gap-2 pb-2 border-b border-[var(--border)]">
+              {renderStatusBadge(deliveryDetail.status)}
+              {renderOriginBadge(deliveryDetail.origin)}
             </div>
+          )}
 
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-5">
-              {detailLoading ? (
-                <div className="py-16 text-center text-[var(--text-muted)] flex flex-col items-center justify-center gap-2 font-mono text-xs">
-                  <RefreshCw className="h-5 w-5 animate-spin text-[var(--primary)]" />
-                  <span>Loading delivery attempts and execution trace...</span>
-                </div>
-              ) : detailError ? (
-                <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3 text-xs text-[var(--status-down)] flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-[var(--status-down)] shrink-0" />
-                  <span>{detailError}</span>
-                </div>
-              ) : deliveryDetail ? (
-                <>
-                  {/* Section 1: Snapshot vs Current Endpoint Configuration */}
-                  <div className="space-y-2.5">
-                    <h4 className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-1.5">
-                      <Shield className="h-3.5 w-3.5 text-[var(--primary)]" />
-                      <span>Endpoint Routing & Snapshot History</span>
-                    </h4>
+          {detailLoading ? (
+            <div className="py-16 text-center text-[var(--text-muted)] flex flex-col items-center justify-center gap-2 font-mono text-xs">
+              <RefreshCw className="h-5 w-5 animate-spin text-[var(--primary)]" />
+              <span>Loading delivery attempts and execution trace...</span>
+            </div>
+          ) : detailError ? (
+            <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3 text-xs text-[var(--status-down)] flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-[var(--status-down)] shrink-0" />
+              <span>{detailError}</span>
+            </div>
+          ) : deliveryDetail ? (
+            <>
+              {/* Section 1: Snapshot vs Current Endpoint Configuration */}
+              <div className="space-y-2.5">
+                <h4 className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-1.5">
+                  <Shield className="h-3.5 w-3.5 text-[var(--primary)]" />
+                  <span>Endpoint Routing & Snapshot History</span>
+                </h4>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {/* Historical Snapshot */}
-                      <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface-subtle)] p-3 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-mono uppercase text-[var(--text-dim)]">Snapshot at Dispatch</span>
-                          <span className="text-[10px] font-mono text-[var(--text-muted)]">Historical</span>
-                        </div>
-                        <div className="text-xs font-semibold text-[var(--text-primary)]">{deliveryDetail.endpointName}</div>
-                        <div className="font-mono text-[11px] text-[var(--primary)] break-all select-all">
-                          {deliveryDetail.destinationUrl}
-                        </div>
-                      </div>
-
-                      {/* Current Live State */}
-                      <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface-subtle)] p-3 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-mono uppercase text-[var(--text-dim)]">Current Live Endpoint</span>
-                          {deliveryDetail.currentEndpoint?.isDeleted ? (
-                            <Badge variant="destructive" className="text-[9px] font-mono px-1 py-0">
-                              DELETED
-                            </Badge>
-                          ) : !deliveryDetail.currentEndpoint?.isEnabled ? (
-                            <Badge variant="warning" className="text-[9px] font-mono px-1 py-0">
-                              DISABLED
-                            </Badge>
-                          ) : (
-                            <Badge variant="healthy" className="text-[9px] font-mono px-1 py-0">
-                              ACTIVE
-                            </Badge>
-                          )}
-                        </div>
-
-                        {deliveryDetail.currentEndpoint ? (
-                          <>
-                            <div className="text-xs font-semibold text-[var(--text-primary)]">
-                              {deliveryDetail.currentEndpoint.name}
-                            </div>
-                            <div className="font-mono text-[11px] text-[var(--text-secondary)] break-all select-all">
-                              {deliveryDetail.currentEndpoint.url}
-                            </div>
-                            {deliveryDetail.currentEndpoint.url !== deliveryDetail.destinationUrl && (
-                              <div className="text-[10px] font-mono text-[var(--status-warning)] flex items-center gap-1 pt-1">
-                                <Info className="h-3 w-3 shrink-0" />
-                                <span>URL changed since original delivery</span>
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <div className="text-xs text-[var(--text-dim)] italic pt-1 font-mono">
-                            Endpoint no longer exists in database.
-                          </div>
-                        )}
-                      </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Historical Snapshot */}
+                  <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface-subtle)] p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-[var(--text-dim)]">Snapshot at Dispatch</span>
+                      <span className="text-[10px] font-mono text-[var(--text-muted)]">Historical</span>
                     </div>
-
-                    {/* Replay Lineage Note if present */}
-                    {deliveryDetail.replayOfId && (
-                      <div className="rounded-[4px] border border-[var(--primary)]/30 bg-[var(--primary)]/10 p-2.5 text-xs text-[var(--primary)] flex items-center gap-2 font-mono">
-                        <RotateCw className="h-3.5 w-3.5 shrink-0" />
-                        <span>
-                          Replayed from original delivery:{' '}
-                          <strong className="select-all">{deliveryDetail.replayOfId}</strong>
-                        </span>
-                      </div>
-                    )}
+                    <div className="text-xs font-semibold text-[var(--text-primary)]">{deliveryDetail.endpointName}</div>
+                    <div className="font-mono text-[11px] text-[var(--primary)] break-all select-all">
+                      {deliveryDetail.destinationUrl}
+                    </div>
                   </div>
 
-                  {/* Section 2: Safe Payload & Response Inspector */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between border-b border-[var(--border)] pb-1.5">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setInspectorTab('payload')}
-                          className={`text-xs font-mono font-medium pb-1 border-b-2 transition-colors ${
-                            inspectorTab === 'payload'
-                              ? 'border-[var(--primary)] text-[var(--text-primary)]'
-                              : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                          }`}
-                        >
-                          Event Payload JSON
-                        </button>
-                        {deliveryDetail.latestAttempt?.responsePreview && (
-                          <button
-                            type="button"
-                            onClick={() => setInspectorTab('response')}
-                            className={`text-xs font-mono font-medium pb-1 border-b-2 transition-colors ${
-                              inspectorTab === 'response'
-                                ? 'border-[var(--primary)] text-[var(--text-primary)]'
-                                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                            }`}
-                          >
-                            Latest Response Preview
-                          </button>
-                        )}
-                      </div>
-
-                      {inspectorTab === 'payload' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(
-                              JSON.stringify(deliveryDetail.event.payload, null, 2),
-                            );
-                            setCopiedPayload(true);
-                            setTimeout(() => setCopiedPayload(false), 2000);
-                          }}
-                          className="flex items-center gap-1 text-[11px] font-mono text-[var(--primary)] hover:underline"
-                        >
-                          {copiedPayload ? (
-                            <Check className="h-3 w-3 text-[var(--status-healthy)]" />
-                          ) : (
-                            <Copy className="h-3 w-3" />
-                          )}
-                          <span>{copiedPayload ? 'Copied' : 'Copy JSON'}</span>
-                        </button>
+                  {/* Current Live State */}
+                  <div className="rounded-[4px] border border-[var(--border)] bg-[var(--surface-subtle)] p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase text-[var(--text-dim)]">Current Live Endpoint</span>
+                      {deliveryDetail.currentEndpoint?.isDeleted ? (
+                        <Badge variant="destructive" className="text-[9px] font-mono px-1 py-0">
+                          DELETED
+                        </Badge>
+                      ) : !deliveryDetail.currentEndpoint?.isEnabled ? (
+                        <Badge variant="warning" className="text-[9px] font-mono px-1 py-0">
+                          DISABLED
+                        </Badge>
+                      ) : (
+                        <Badge variant="healthy" className="text-[9px] font-mono px-1 py-0">
+                          ACTIVE
+                        </Badge>
                       )}
                     </div>
 
-                    {inspectorTab === 'payload' ? (
-                      <div className="rounded-[4px] border border-[var(--border)] bg-[var(--background)] p-3 max-h-52 overflow-auto font-mono text-xs text-[var(--text-primary)] select-all whitespace-pre-wrap break-words">
-                        {JSON.stringify(deliveryDetail.event.payload, null, 2)}
-                      </div>
+                    {deliveryDetail.currentEndpoint ? (
+                      <>
+                        <div className="text-xs font-semibold text-[var(--text-primary)]">
+                          {deliveryDetail.currentEndpoint.name}
+                        </div>
+                        <div className="font-mono text-[11px] text-[var(--text-secondary)] break-all select-all">
+                          {deliveryDetail.currentEndpoint.url}
+                        </div>
+                        {deliveryDetail.currentEndpoint.url !== deliveryDetail.destinationUrl && (
+                          <div className="text-[10px] font-mono text-[var(--status-warning)] flex items-center gap-1 pt-1">
+                            <Info className="h-3 w-3 shrink-0" />
+                            <span>URL changed since original delivery</span>
+                          </div>
+                        )}
+                      </>
                     ) : (
-                      <div className="rounded-[4px] border border-[var(--border)] bg-[var(--background)] p-3 max-h-52 overflow-auto font-mono text-xs text-[var(--text-secondary)] select-all whitespace-pre-wrap break-words">
-                        {deliveryDetail.latestAttempt?.responsePreview || 'No response body recorded.'}
+                      <div className="text-xs text-[var(--text-dim)] italic pt-1 font-mono">
+                        Endpoint no longer exists in database.
                       </div>
                     )}
                   </div>
+                </div>
 
-                  {/* Section 3: Chronological Attempt Timeline */}
-                  <div className="space-y-2.5">
-                    <h4 className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 text-[var(--primary)]" />
-                      <span>Execution Trace ({attempts.length} Attempt{attempts.length === 1 ? '' : 's'})</span>
-                    </h4>
+                {/* Replay Lineage Note if present */}
+                {deliveryDetail.replayOfId && (
+                  <div className="rounded-[4px] border border-[var(--primary)]/30 bg-[var(--primary)]/10 p-2.5 text-xs text-[var(--primary)] flex items-center gap-2 font-mono">
+                    <RotateCw className="h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      Replayed from original delivery:{' '}
+                      <strong className="select-all">{deliveryDetail.replayOfId}</strong>
+                    </span>
+                  </div>
+                )}
+              </div>
 
-                    {attemptsLoading ? (
-                      <div className="py-6 text-center text-xs font-mono text-[var(--text-muted)]">
-                        Loading execution trace...
-                      </div>
-                    ) : attempts.length === 0 ? (
-                      <div className="p-3.5 rounded-[4px] bg-[var(--surface-subtle)] border border-[var(--border)] text-xs font-mono text-[var(--text-muted)] text-center">
-                        Zero execution attempts recorded yet (delivery is queued).
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {attempts.map((attempt) => (
-                          <div
-                            key={attempt.id}
-                            className="rounded-[4px] border border-[var(--border)] bg-[var(--surface-subtle)] p-3 space-y-1.5 font-mono"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-[var(--text-primary)]">
-                                  Attempt #{attempt.attemptNumber}
-                                </span>
-                                <Badge
-                                  variant={
-                                    attempt.outcome === 'SUCCESS'
-                                      ? 'healthy'
-                                      : attempt.outcome === 'FAILED'
-                                      ? 'destructive'
-                                      : 'outline'
-                                  }
-                                  className="text-[9px] px-1 py-0"
-                                >
-                                  {attempt.outcome}
-                                </Badge>
-                                {attempt.httpStatus && (
-                                  <span className="text-[10px] text-[var(--text-secondary)] tabular-nums">
-                                    HTTP {attempt.httpStatus}
-                                  </span>
-                                )}
-                              </div>
+              {/* Section 2: Safe Payload & Response Inspector */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between border-b border-[var(--border)] pb-1.5">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setInspectorTab('payload')}
+                      className={`text-xs font-mono font-medium pb-1 border-b-2 transition-colors ${
+                        inspectorTab === 'payload'
+                          ? 'border-[var(--primary)] text-[var(--text-primary)]'
+                          : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      Event Payload JSON
+                    </button>
+                    {deliveryDetail.latestAttempt?.responsePreview && (
+                      <button
+                        type="button"
+                        onClick={() => setInspectorTab('response')}
+                        className={`text-xs font-mono font-medium pb-1 border-b-2 transition-colors ${
+                          inspectorTab === 'response'
+                            ? 'border-[var(--primary)] text-[var(--text-primary)]'
+                            : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                        }`}
+                      >
+                        Latest Response Preview
+                      </button>
+                    )}
+                  </div>
 
-                              <div className="text-[11px] text-[var(--text-muted)] flex items-center gap-2 tabular-nums">
-                                {attempt.durationMs !== null && (
-                                  <span>{attempt.durationMs}ms</span>
-                                )}
-                                <span>{formatExactDateTime(attempt.startedAt)}</span>
-                              </div>
-                            </div>
+                  {inspectorTab === 'payload' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          JSON.stringify(deliveryDetail.event.payload, null, 2),
+                        );
+                        setCopiedPayload(true);
+                        setTimeout(() => setCopiedPayload(false), 2000);
+                      }}
+                      className="flex items-center gap-1 text-[11px] font-mono text-[var(--primary)] hover:underline cursor-pointer"
+                    >
+                      {copiedPayload ? (
+                        <Check className="h-3 w-3 text-[var(--status-healthy)]" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                      <span>{copiedPayload ? 'Copied' : 'Copy JSON'}</span>
+                    </button>
+                  )}
+                </div>
 
-                            {attempt.errorCode && (
-                              <div className="text-xs text-[var(--status-down)]">
-                                Error: {attempt.errorCode}
-                              </div>
-                            )}
+                {inspectorTab === 'payload' ? (
+                  <div className="rounded-[4px] border border-[var(--border)] bg-[var(--background)] p-3 max-h-52 overflow-auto font-mono text-xs text-[var(--text-primary)] select-all whitespace-pre-wrap break-words">
+                    {JSON.stringify(deliveryDetail.event.payload, null, 2)}
+                  </div>
+                ) : (
+                  <div className="rounded-[4px] border border-[var(--border)] bg-[var(--background)] p-3 max-h-52 overflow-auto font-mono text-xs text-[var(--text-secondary)] select-all whitespace-pre-wrap break-words">
+                    {deliveryDetail.latestAttempt?.responsePreview || 'No response body recorded.'}
+                  </div>
+                )}
+              </div>
 
-                            {attempt.responsePreview && (
-                              <div className="text-[11px] text-[var(--text-dim)] truncate pt-0.5">
-                                Response: {attempt.responsePreview}
-                              </div>
+              {/* Section 3: Chronological Attempt Timeline */}
+              <div className="space-y-2.5">
+                <h4 className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-[var(--primary)]" />
+                  <span>Execution Trace ({attempts.length} Attempt{attempts.length === 1 ? '' : 's'})</span>
+                </h4>
+
+                {attemptsLoading ? (
+                  <div className="py-6 text-center text-xs font-mono text-[var(--text-muted)]">
+                    Loading execution trace...
+                  </div>
+                ) : attempts.length === 0 ? (
+                  <div className="p-3.5 rounded-[4px] bg-[var(--surface-subtle)] border border-[var(--border)] text-xs font-mono text-[var(--text-muted)] text-center">
+                    Zero execution attempts recorded yet (delivery is queued).
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {attempts.map((attempt) => (
+                      <div
+                        key={attempt.id}
+                        className="rounded-[4px] border border-[var(--border)] bg-[var(--surface-subtle)] p-3 space-y-1.5 font-mono"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-[var(--text-primary)]">
+                              Attempt #{attempt.attemptNumber}
+                            </span>
+                            <Badge
+                              variant={
+                                attempt.outcome === 'SUCCESS'
+                                  ? 'healthy'
+                                  : attempt.outcome === 'FAILED'
+                                  ? 'destructive'
+                                  : 'outline'
+                              }
+                              className="text-[9px] px-1 py-0"
+                            >
+                              {attempt.outcome}
+                            </Badge>
+                            {attempt.httpStatus && (
+                              <span className="text-[10px] text-[var(--text-secondary)] tabular-nums">
+                                HTTP {attempt.httpStatus}
+                              </span>
                             )}
                           </div>
-                        ))}
+
+                          <div className="text-[11px] text-[var(--text-muted)] flex items-center gap-2 tabular-nums">
+                            {attempt.durationMs !== null && (
+                              <span>{attempt.durationMs}ms</span>
+                            )}
+                            <span>{formatExactDateTime(attempt.startedAt)}</span>
+                          </div>
+                        </div>
+
+                        {attempt.errorCode && (
+                          <div className="text-xs text-[var(--status-down)]">
+                            Error: {attempt.errorCode}
+                          </div>
+                        )}
+
+                        {attempt.responsePreview && (
+                          <div className="text-[11px] text-[var(--text-dim)] truncate pt-0.5">
+                            Response: {attempt.responsePreview}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    ))}
                   </div>
-                </>
-              ) : null}
-            </div>
+                )}
+              </div>
+            </>
+          ) : null}
 
-            {/* Modal Footer */}
-            <div className="flex items-center justify-between p-3.5 border-t border-[var(--border)] bg-[var(--surface-subtle)]">
+          {/* Modal Footer */}
+          <div className="flex items-center justify-between pt-3 border-t border-[var(--border)] font-mono text-xs">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInspectingDeliveryId(null)}
+            >
+              Close
+            </Button>
+
+            {deliveryDetail && (
               <Button
-                variant="outline"
                 size="sm"
-                onClick={() => setInspectingDeliveryId(null)}
-                className="font-mono text-xs"
+                onClick={() => {
+                  const d = deliveryDetail;
+                  setInspectingDeliveryId(null);
+                  openReplayModal(d);
+                }}
+                className="gap-1.5"
               >
-                Close
+                <RotateCw className="h-3 w-3" />
+                <span>Replay Delivery</span>
               </Button>
-
-              {deliveryDetail && (
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    const d = deliveryDetail;
-                    setInspectingDeliveryId(null);
-                    openReplayModal(d);
-                  }}
-                  className="font-mono text-xs gap-1.5"
-                >
-                  <RotateCw className="h-3 w-3" />
-                  <span>Replay Delivery</span>
-                </Button>
-              )}
-            </div>
+            )}
           </div>
         </div>
-      )}
+      </ModalDialog>
 
       {/* MANUAL REPLAY CONFIRMATION MODAL */}
-      {replayingDelivery && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--border)] rounded-[6px] shadow-2xl p-5 space-y-4 font-sans">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-[4px] bg-[var(--surface-active)] text-[var(--primary)] shrink-0">
-                <RotateCw className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold font-mono text-[var(--text-primary)]">
-                  Confirm Manual Webhook Replay
-                </h3>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                  Re-dispatches the stored event payload to the destination endpoint.
-                </p>
-              </div>
-            </div>
-
+      <ModalDialog
+        isOpen={Boolean(replayingDelivery)}
+        onClose={() => setReplayingDelivery(null)}
+        title="Confirm Manual Webhook Replay"
+        description="Re-dispatches the stored event payload to the destination endpoint."
+        role="alertdialog"
+        maxWidth="max-w-lg"
+      >
+        {replayingDelivery && (
+          <div className="space-y-4 font-sans">
             {/* Receiver Idempotency Warning */}
             <div className="rounded-[4px] border border-[var(--status-warning)]/40 bg-[var(--status-warning-bg)]/20 p-3 text-xs text-[var(--status-warning)] space-y-1">
               <div className="flex items-center gap-1.5 font-semibold">
@@ -1011,8 +986,8 @@ export function DeliveriesTab({ webhooks }: DeliveriesTabProps) {
               </Button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </ModalDialog>
     </div>
   );
 }

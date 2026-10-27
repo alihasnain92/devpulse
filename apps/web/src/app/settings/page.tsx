@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { ModalDialog } from '@/components/ui/modal-dialog';
 import { OperationalPageHeader } from '@/components/ui/operational-page-header';
 import { StatusIndicator } from '@/components/ui/status-indicator';
 import {
@@ -32,7 +33,6 @@ import {
   Key,
   Plus,
   RefreshCw,
-  ShieldAlert,
   Trash2,
   Webhook,
 } from 'lucide-react';
@@ -45,8 +45,8 @@ const API_KEY_SCOPE_DESCRIPTIONS: Record<ApiKeyScope, string> = {
   'incidents:read': 'Access incident history, outages, and timeline',
   'webhooks:read': 'View configured webhook endpoints and delivery logs',
   'webhooks:write': 'Create, update, test, and manage webhook endpoints',
-  'notifications:read': 'View alert notification history and channels',
-  'notifications:write': 'Update notification preferences and email alerts',
+  'notifications:read': 'View alert notification history and delivery logs',
+  'notifications:write': 'Update in-app and email notification preferences',
 };
 
 export default function SettingsPage() {
@@ -319,7 +319,6 @@ export default function SettingsPage() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Page Header */}
         <OperationalPageHeader
-          eyebrow="Configuration & Integrations"
           title="Settings"
           description="Manage webhook endpoints, inspect delivery histories, configure notification routing, and manage API keys."
         />
@@ -421,7 +420,7 @@ export default function SettingsPage() {
                     No Webhook Endpoints Configured
                   </div>
                   <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                    Register an endpoint to stream signed incident payloads to PagerDuty, Slack, or internal event receivers.
+                    Register an HTTPS endpoint to receive signed incident payloads at your event receiver.
                   </p>
                   <div className="pt-2">
                     <Button
@@ -633,136 +632,127 @@ export default function SettingsPage() {
       </main>
 
       {/* MODAL 1: REGISTER WEBHOOK */}
-      {showCreateWebhook && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--border)] rounded-[6px] shadow-2xl p-5 space-y-4 font-sans">
-            <div>
-              <h3 className="text-sm font-semibold font-mono text-[var(--text-primary)]">
-                Register Webhook Endpoint
-              </h3>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                Configure destination HTTPS URL and event subscriptions.
+      <ModalDialog
+        isOpen={showCreateWebhook}
+        onClose={() => setShowCreateWebhook(false)}
+        title="Register Webhook Endpoint"
+        description="Configure destination HTTPS URL and event subscriptions."
+        maxWidth="max-w-lg"
+      >
+        <div className="space-y-4 font-sans">
+          {createWebhookError && (
+            <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3 text-xs text-[var(--status-down)] flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{createWebhookError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleCreateWebhook} className="space-y-3.5">
+            <div className="space-y-1">
+              <Label htmlFor="wh-name">Endpoint Name *</Label>
+              <Input
+                id="wh-name"
+                placeholder="e.g. Production Incident Webhook"
+                value={newWebhookName}
+                onChange={(e) => setNewWebhookName(e.target.value)}
+                maxLength={100}
+                required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="wh-url">Destination URL *</Label>
+              <Input
+                id="wh-url"
+                placeholder="https://hooks.example.com/devpulse"
+                value={newWebhookUrl}
+                onChange={(e) => setNewWebhookUrl(e.target.value)}
+                required
+              />
+              <p className="text-[10px] font-mono text-[var(--text-dim)]">
+                Must be HTTP/HTTPS. Private IP ranges (RFC1918) and cloud metadata addresses are blocked.
               </p>
             </div>
 
-            {createWebhookError && (
-              <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3 text-xs text-[var(--status-down)] flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{createWebhookError}</span>
-              </div>
-            )}
+            <div className="space-y-1">
+              <Label htmlFor="wh-desc">Description (Optional)</Label>
+              <Input
+                id="wh-desc"
+                placeholder="Context about this receiver"
+                value={newWebhookDescription}
+                onChange={(e) => setNewWebhookDescription(e.target.value)}
+                maxLength={255}
+              />
+            </div>
 
-            <form onSubmit={handleCreateWebhook} className="space-y-3.5">
-              <div className="space-y-1">
-                <Label htmlFor="wh-name">Endpoint Name *</Label>
-                <Input
-                  id="wh-name"
-                  placeholder="e.g. Production PagerDuty Bridge"
-                  value={newWebhookName}
-                  onChange={(e) => setNewWebhookName(e.target.value)}
-                  maxLength={100}
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="wh-url">Destination URL *</Label>
-                <Input
-                  id="wh-url"
-                  placeholder="https://hooks.example.com/devpulse"
-                  value={newWebhookUrl}
-                  onChange={(e) => setNewWebhookUrl(e.target.value)}
-                  required
-                />
-                <p className="text-[10px] font-mono text-[var(--text-dim)]">
-                  Must be HTTP/HTTPS. Private IP ranges (RFC1918) and cloud metadata addresses are blocked.
-                </p>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="wh-desc">Description (Optional)</Label>
-                <Input
-                  id="wh-desc"
-                  placeholder="Context about this receiver"
-                  value={newWebhookDescription}
-                  onChange={(e) => setNewWebhookDescription(e.target.value)}
-                  maxLength={255}
-                />
-              </div>
-
-              <div className="space-y-1.5 pt-1">
-                <Label>Event Subscriptions</Label>
-                <div className="space-y-1.5">
-                  {WEBHOOK_EVENT_TYPES.map((ev) => {
-                    const isChecked = newWebhookEvents.includes(ev);
-                    return (
-                      <label
-                        key={ev}
-                        className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setNewWebhookEvents([...newWebhookEvents, ev]);
-                            } else {
-                              setNewWebhookEvents(newWebhookEvents.filter((item) => item !== ev));
-                            }
-                          }}
-                          className="rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)] h-4 w-4"
-                        />
-                        <span className="font-mono text-xs text-[var(--text-primary)]">{ev}</span>
-                        <span className="text-[11px] text-[var(--text-muted)]">
-                          {ev === 'incident.created' ? '— Triggered on 3 consecutive check failures' : '— Triggered when service recovers'}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)] font-mono text-xs">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowCreateWebhook(false)}
-                  disabled={creatingWebhook}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={creatingWebhook}
-                >
-                  {creatingWebhook ? 'Registering...' : 'Register Endpoint'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: REVEAL WEBHOOK SIGNING SECRET (SHOWN ONCE) */}
-      {revealedSecret && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--status-healthy)]/40 rounded-[6px] shadow-2xl p-5 space-y-4 font-sans">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-[4px] bg-[var(--status-healthy-bg)]/30 text-[var(--status-healthy)] shrink-0">
-                <ShieldAlert className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold font-mono text-[var(--text-primary)]">
-                  Save Webhook Signing Secret Immediately
-                </h3>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                  Endpoint <strong className="text-[var(--text-primary)]">{revealedSecret.name}</strong> was created. This secret is shown only once and cannot be retrieved again!
-                </p>
+            <div className="space-y-1.5 pt-1">
+              <Label>Event Subscriptions</Label>
+              <div className="space-y-1.5">
+                {WEBHOOK_EVENT_TYPES.map((ev) => {
+                  const isChecked = newWebhookEvents.includes(ev);
+                  return (
+                    <label
+                      key={ev}
+                      className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setNewWebhookEvents([...newWebhookEvents, ev]);
+                          } else {
+                            setNewWebhookEvents(newWebhookEvents.filter((item) => item !== ev));
+                          }
+                        }}
+                        className="rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)] h-4 w-4"
+                      />
+                      <span className="font-mono text-xs text-[var(--text-primary)]">{ev}</span>
+                      <span className="text-[11px] text-[var(--text-muted)]">
+                        {ev === 'incident.created' ? '— Triggered on 3 consecutive check failures' : '— Triggered when service recovers'}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)] font-mono text-xs">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCreateWebhook(false)}
+                disabled={creatingWebhook}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={creatingWebhook}
+              >
+                {creatingWebhook ? 'Registering...' : 'Register Endpoint'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      </ModalDialog>
+
+      {/* MODAL 2: REVEAL WEBHOOK SIGNING SECRET (SHOWN ONCE) */}
+      <ModalDialog
+        isOpen={Boolean(revealedSecret)}
+        onClose={() => setRevealedSecret(null)}
+        title="Save Webhook Signing Secret Immediately"
+        description={revealedSecret ? `Endpoint "${revealedSecret.name}" was created. This secret is shown only once and cannot be retrieved again!` : undefined}
+        role="alertdialog"
+        closeOnEscape={false}
+        closeOnBackdropClick={false}
+        showCloseButton={false}
+        maxWidth="max-w-lg"
+      >
+        {revealedSecret && (
+          <div className="space-y-4 font-sans">
             <div className="space-y-1 bg-[var(--background)] border border-[var(--border)] rounded-[4px] p-3 font-mono">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] uppercase text-[var(--text-dim)]">HMAC-SHA256 Signing Secret</span>
@@ -773,7 +763,7 @@ export default function SettingsPage() {
                     setCopiedSecret(true);
                     setTimeout(() => setCopiedSecret(false), 2000);
                   }}
-                  className="flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline"
+                  className="flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline cursor-pointer"
                 >
                   {copiedSecret ? <Check className="h-3 w-3 text-[var(--status-healthy)]" /> : <Copy className="h-3 w-3" />}
                   <span>{copiedSecret ? 'Copied' : 'Copy'}</span>
@@ -801,224 +791,210 @@ export default function SettingsPage() {
               </Button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </ModalDialog>
 
       {/* MODAL 3: EDIT WEBHOOK */}
-      {editingWebhook && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--border)] rounded-[6px] shadow-2xl p-5 space-y-4 font-sans">
-            <div>
-              <h3 className="text-sm font-semibold font-mono text-[var(--text-primary)]">
-                Edit Webhook Endpoint
-              </h3>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                Update destination URL, description, or event subscriptions.
-              </p>
+      <ModalDialog
+        isOpen={Boolean(editingWebhook)}
+        onClose={() => setEditingWebhook(null)}
+        title="Edit Webhook Endpoint"
+        description="Update destination URL, description, or event subscriptions."
+        maxWidth="max-w-lg"
+      >
+        {editingWebhook && (
+          <form onSubmit={handleUpdateWebhook} className="space-y-3.5 font-sans">
+            <div className="space-y-1">
+              <Label htmlFor="edit-name">Endpoint Name *</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                maxLength={100}
+                required
+              />
             </div>
 
-            <form onSubmit={handleUpdateWebhook} className="space-y-3.5">
-              <div className="space-y-1">
-                <Label htmlFor="edit-name">Endpoint Name *</Label>
-                <Input
-                  id="edit-name"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  maxLength={100}
-                  required
+            <div className="space-y-1">
+              <Label htmlFor="edit-url">Destination URL *</Label>
+              <Input
+                id="edit-url"
+                value={editUrl}
+                onChange={(e) => setEditUrl(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="edit-desc">Description (Optional)</Label>
+              <Input
+                id="edit-desc"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                maxLength={255}
+              />
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <Label>Event Subscriptions</Label>
+              <div className="space-y-1.5">
+                {WEBHOOK_EVENT_TYPES.map((ev) => {
+                  const isChecked = editEvents.includes(ev);
+                  return (
+                    <label key={ev} className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setEditEvents([...editEvents, ev]);
+                          } else {
+                            setEditEvents(editEvents.filter((item) => item !== ev));
+                          }
+                        }}
+                        className="rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)] h-4 w-4"
+                      />
+                      <span className="font-mono text-xs text-[var(--text-primary)]">{ev}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-1">
+              <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editEnabled}
+                  onChange={(e) => setEditEnabled(e.target.checked)}
+                  className="rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)] h-4 w-4"
                 />
-              </div>
+                <span>Endpoint is active (receive events)</span>
+              </label>
+            </div>
 
-              <div className="space-y-1">
-                <Label htmlFor="edit-url">Destination URL *</Label>
-                <Input
-                  id="edit-url"
-                  value={editUrl}
-                  onChange={(e) => setEditUrl(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="edit-desc">Description (Optional)</Label>
-                <Input
-                  id="edit-desc"
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  maxLength={255}
-                />
-              </div>
-
-              <div className="space-y-1.5 pt-1">
-                <Label>Event Subscriptions</Label>
-                <div className="space-y-1.5">
-                  {WEBHOOK_EVENT_TYPES.map((ev) => {
-                    const isChecked = editEvents.includes(ev);
-                    return (
-                      <label key={ev} className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setEditEvents([...editEvents, ev]);
-                            } else {
-                              setEditEvents(editEvents.filter((item) => item !== ev));
-                            }
-                          }}
-                          className="rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)] h-4 w-4"
-                        />
-                        <span className="font-mono text-xs text-[var(--text-primary)]">{ev}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="pt-1">
-                <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editEnabled}
-                    onChange={(e) => setEditEnabled(e.target.checked)}
-                    className="rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)] h-4 w-4"
-                  />
-                  <span>Endpoint is active (receive events)</span>
-                </label>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)] font-mono text-xs">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditingWebhook(null)}
-                  disabled={updatingWebhook}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={updatingWebhook}
-                >
-                  {updatingWebhook ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)] font-mono text-xs">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setEditingWebhook(null)}
+                disabled={updatingWebhook}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={updatingWebhook}
+              >
+                {updatingWebhook ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </form>
+        )}
+      </ModalDialog>
 
       {/* MODAL 4: CREATE API KEY */}
-      {showCreateKey && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--border)] rounded-[6px] shadow-2xl p-5 space-y-4 font-sans">
-            <div>
-              <h3 className="text-sm font-semibold font-mono text-[var(--text-primary)]">
-                Create Programmatic API Key
-              </h3>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                Select least-privilege scopes for automated scripts and integrations.
-              </p>
+      <ModalDialog
+        isOpen={showCreateKey}
+        onClose={() => setShowCreateKey(false)}
+        title="Create Programmatic API Key"
+        description="Select least-privilege scopes for automated scripts and integrations."
+        maxWidth="max-w-lg"
+      >
+        <div className="space-y-4 font-sans">
+          {createKeyError && (
+            <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3 text-xs text-[var(--status-down)] flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{createKeyError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleCreateKey} className="space-y-3.5">
+            <div className="space-y-1">
+              <Label htmlFor="key-name">API Key Friendly Name *</Label>
+              <Input
+                id="key-name"
+                placeholder="e.g. CI Health Probe"
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                required
+              />
             </div>
 
-            {createKeyError && (
-              <div className="rounded-[4px] border border-[var(--status-down)]/40 bg-[var(--status-down-bg)]/20 p-3 text-xs text-[var(--status-down)] flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{createKeyError}</span>
+            <div className="space-y-1.5 pt-1">
+              <Label>Allowed Scopes</Label>
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {API_KEY_SCOPES.map((sc) => {
+                  const isChecked = newKeyScopes.includes(sc);
+                  return (
+                    <label
+                      key={sc}
+                      className="flex items-start gap-2.5 text-xs text-[var(--text-secondary)] cursor-pointer p-1.5 rounded-[4px] hover:bg-[var(--surface-subtle)] transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setNewKeyScopes([...newKeyScopes, sc]);
+                          } else {
+                            setNewKeyScopes(newKeyScopes.filter((item) => item !== sc));
+                          }
+                        }}
+                        className="mt-0.5 rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)] h-4 w-4 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="font-mono text-xs text-[var(--text-primary)] font-semibold">
+                          {sc}
+                        </span>
+                        <p className="text-[11px] text-[var(--text-muted)] leading-tight">
+                          {API_KEY_SCOPE_DESCRIPTIONS[sc]}
+                        </p>
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
-            )}
+            </div>
 
-            <form onSubmit={handleCreateKey} className="space-y-3.5">
-              <div className="space-y-1">
-                <Label htmlFor="key-name">API Key Friendly Name *</Label>
-                <Input
-                  id="key-name"
-                  placeholder="e.g. CI Health Probe"
-                  value={newKeyName}
-                  onChange={(e) => setNewKeyName(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5 pt-1">
-                <Label>Allowed Scopes</Label>
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {API_KEY_SCOPES.map((sc) => {
-                    const isChecked = newKeyScopes.includes(sc);
-                    return (
-                      <label
-                        key={sc}
-                        className="flex items-start gap-2.5 text-xs text-[var(--text-secondary)] cursor-pointer p-1.5 rounded-[4px] hover:bg-[var(--surface-subtle)] transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setNewKeyScopes([...newKeyScopes, sc]);
-                            } else {
-                              setNewKeyScopes(newKeyScopes.filter((item) => item !== sc));
-                            }
-                          }}
-                          className="mt-0.5 rounded-[2px] border-[var(--border)] bg-[var(--surface-active)] text-[var(--primary)] focus:ring-[var(--border-focus)] h-4 w-4 shrink-0"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <span className="font-mono text-xs text-[var(--text-primary)] font-semibold">
-                            {sc}
-                          </span>
-                          <p className="text-[11px] text-[var(--text-muted)] leading-tight">
-                            {API_KEY_SCOPE_DESCRIPTIONS[sc]}
-                          </p>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)] font-mono text-xs">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowCreateKey(false)}
-                  disabled={creatingKey}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={creatingKey}
-                >
-                  {creatingKey ? 'Generating...' : 'Generate API Key'}
-                </Button>
-              </div>
-            </form>
-          </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)] font-mono text-xs">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCreateKey(false)}
+                disabled={creatingKey}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={creatingKey}
+              >
+                {creatingKey ? 'Generating...' : 'Generate API Key'}
+              </Button>
+            </div>
+          </form>
         </div>
-      )}
+      </ModalDialog>
 
       {/* MODAL 5: REVEAL RAW API KEY (SHOWN ONCE) */}
-      {revealedKey && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--primary)]/40 rounded-[6px] shadow-2xl p-5 space-y-4 font-sans">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-[4px] bg-[var(--primary)]/20 text-[var(--primary)] shrink-0">
-                <Key className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold font-mono text-[var(--text-primary)]">
-                  Save Your API Key Immediately
-                </h3>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                  API Key <strong className="text-[var(--text-primary)]">{revealedKey.name}</strong> was created. This token is shown only once and cannot be retrieved again!
-                </p>
-              </div>
-            </div>
-
+      <ModalDialog
+        isOpen={Boolean(revealedKey)}
+        onClose={() => setRevealedKey(null)}
+        title="Save Your API Key Immediately"
+        description={revealedKey ? `API Key "${revealedKey.name}" was created. This token is shown only once and cannot be retrieved again!` : undefined}
+        role="alertdialog"
+        closeOnEscape={false}
+        closeOnBackdropClick={false}
+        showCloseButton={false}
+        maxWidth="max-w-lg"
+      >
+        {revealedKey && (
+          <div className="space-y-4 font-sans">
             <div className="space-y-1 bg-[var(--background)] border border-[var(--border)] rounded-[4px] p-3 font-mono">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] uppercase text-[var(--text-dim)]">Raw API Token</span>
@@ -1029,7 +1005,7 @@ export default function SettingsPage() {
                     setCopiedKey(true);
                     setTimeout(() => setCopiedKey(false), 2000);
                   }}
-                  className="flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline"
+                  className="flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline cursor-pointer"
                 >
                   {copiedKey ? <Check className="h-3 w-3 text-[var(--status-healthy)]" /> : <Copy className="h-3 w-3" />}
                   <span>{copiedKey ? 'Copied' : 'Copy'}</span>
@@ -1057,8 +1033,8 @@ export default function SettingsPage() {
               </Button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </ModalDialog>
 
       {/* CONFIRM DELETE WEBHOOK DIALOG */}
       <ConfirmDialog

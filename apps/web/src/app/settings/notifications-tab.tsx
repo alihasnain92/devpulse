@@ -145,7 +145,7 @@ export function NotificationsTab() {
               </div>
             </div>
             <Badge variant="outline" className="text-[10px] font-mono text-[var(--text-secondary)]">
-              Real-time
+              In-App
             </Badge>
           </div>
 
@@ -232,7 +232,7 @@ export function NotificationsTab() {
                   Email on Incident Opened
                 </div>
                 <div className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-                  Send an email notification immediately when an outage begins.
+                  Send an email notification when an outage is confirmed after 3 consecutive failures.
                 </div>
               </div>
               <span className="text-[10px] font-mono text-[var(--text-dim)] shrink-0 hidden sm:inline">

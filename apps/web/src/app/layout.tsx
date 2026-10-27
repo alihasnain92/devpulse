@@ -16,8 +16,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'DevPulse — API Uptime Monitoring & Incident Management',
-  description: 'Enterprise-grade uptime monitoring and incident tracking platform.',
+  title: 'DevPulse — Developer Reliability Console',
+  description:
+    'Developer reliability console for continuous API uptime monitoring, automated incident response, and transactional webhook verification.',
 };
 
 export default function RootLayout({

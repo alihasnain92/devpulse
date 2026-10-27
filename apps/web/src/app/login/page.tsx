@@ -48,129 +48,149 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
-      <Card className="w-full max-w-md border-slate-800 bg-slate-900/80 backdrop-blur">
-        <CardHeader className="space-y-2 text-center">
-          <div className="flex justify-center mb-2">
-            <Link
-              href="/"
-              className="flex items-center gap-2 text-blue-400 font-bold text-lg"
-            >
-              <Activity className="h-6 w-6 text-blue-500" />
-              <span>DevPulse</span>
-            </Link>
-          </div>
-          <CardTitle className="text-2xl text-white">Welcome back</CardTitle>
-          <CardDescription className="text-slate-400">
-            Sign in to access your API monitors and incident alerts
-          </CardDescription>
-        </CardHeader>
-
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            {error && (
-              <div
-                role="alert"
-                className="rounded-md bg-red-950/50 border border-red-800/60 p-3 text-sm text-red-300"
-              >
-                {error}
-              </div>
-            )}
-
-            <div className="space-y-2 text-left">
-              <Label htmlFor="email">Email address</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="developer@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                required
-                disabled={isSubmitting}
-              />
+    <div className="flex min-h-screen flex-col items-center justify-center p-4 sm:p-6 bg-[var(--background)]">
+      <div className="w-full max-w-sm">
+        {/* Brand header */}
+        <div className="flex items-center justify-center gap-2 mb-6">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-[var(--text-primary)] hover:opacity-90 transition-opacity"
+          >
+            <div className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-input)] bg-[var(--primary)] text-white shadow-xs">
+              <Activity className="h-4 w-4" />
             </div>
+            <span className="font-semibold text-sm tracking-tight text-[var(--text-primary)]">
+              DevPulse
+            </span>
+          </Link>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-[var(--radius-badge)] bg-[var(--surface-raised)] border border-[var(--border-subtle)] text-[var(--text-muted)]">
+            CONSOLE
+          </span>
+        </div>
 
-            <div className="space-y-2 text-left">
-              <Label htmlFor="password">Password</Label>
-              <div className="relative">
+        <Card className="border-[var(--border)] bg-[var(--surface)] shadow-sm">
+          <CardHeader className="space-y-1.5 text-center pb-2">
+            <CardTitle className="text-base font-semibold text-[var(--text-primary)]">
+              Sign in to DevPulse
+            </CardTitle>
+            <CardDescription className="text-xs text-[var(--text-secondary)]">
+              Access your API reliability monitors, alerts, and incident timelines
+            </CardDescription>
+          </CardHeader>
+
+          <form onSubmit={handleSubmit}>
+            <CardContent className="space-y-4 pt-2">
+              {error && (
+                <div
+                  role="alert"
+                  className="rounded-[var(--radius-input)] bg-[var(--status-down-bg)] border border-[var(--status-down-border)] p-3 text-xs text-[var(--status-down)]"
+                >
+                  {error}
+                </div>
+              )}
+
+              <div className="space-y-1.5 text-left">
+                <Label htmlFor="email" className="text-xs font-medium text-[var(--text-secondary)]">
+                  Email address
+                </Label>
                 <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
+                  id="email"
+                  type="email"
+                  placeholder="developer@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
                   required
                   disabled={isSubmitting}
-                  className="pr-10"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 focus:outline-none"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
               </div>
-            </div>
-          </CardContent>
 
-          <CardFooter className="flex flex-col space-y-4 pt-2">
-            <Button
-              type="submit"
-              className="w-full font-semibold"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                'Sign in'
-              )}
-            </Button>
-
-            {/* Showcase Demo Credentials Helper */}
-            <div className="w-full rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs space-y-1.5 text-left">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-300">
-                  Showcase Demo Account
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('demo@devpulse.dev');
-                    setPassword('Password123!');
-                  }}
-                  className="text-blue-400 hover:text-blue-300 font-medium underline text-[11px]"
-                >
-                  Auto-fill demo
-                </button>
+              <div className="space-y-1.5 text-left">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password" className="text-xs font-medium text-[var(--text-secondary)]">
+                    Password
+                  </Label>
+                </div>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    required
+                    disabled={isSubmitting}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors focus:outline-none"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
-              <div className="text-slate-500 font-mono text-[11px]">
-                demo@devpulse.dev • Password123!
-              </div>
-            </div>
+            </CardContent>
 
-            <p className="text-center text-sm text-slate-400">
-              Don&apos;t have an account?{' '}
-              <Link
-                href="/register"
-                className="text-blue-400 hover:underline font-medium"
+            <CardFooter className="flex flex-col space-y-4 pt-2">
+              <Button
+                type="submit"
+                className="w-full font-medium text-xs h-9"
+                disabled={isSubmitting}
               >
-                Create an account
-              </Link>
-            </p>
-          </CardFooter>
-        </form>
-      </Card>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  'Sign in'
+                )}
+              </Button>
+
+              {/* Showcase Demo Credentials Helper */}
+              <div className="w-full rounded-[var(--radius-input)] border border-[var(--border-subtle)] bg-[var(--surface-subtle)] p-3 text-xs space-y-1.5 text-left">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                    Showcase Account
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail('demo@devpulse.dev');
+                      setPassword('Password123!');
+                    }}
+                    className="text-xs font-mono text-[var(--primary)] hover:underline cursor-pointer"
+                  >
+                    Auto-fill demo
+                  </button>
+                </div>
+                <div className="flex items-center justify-between text-[11px] font-mono text-[var(--text-muted)]">
+                  <span>demo@devpulse.dev</span>
+                  <span className="tracking-widest">••••••••••••</span>
+                </div>
+              </div>
+
+              <p className="text-center text-xs text-[var(--text-secondary)]">
+                Don&apos;t have an account?{' '}
+                <Link
+                  href="/register"
+                  className="text-[var(--primary)] hover:underline font-medium"
+                >
+                  Create an account
+                </Link>
+              </p>
+            </CardFooter>
+          </form>
+        </Card>
+      </div>
     </div>
   );
 }

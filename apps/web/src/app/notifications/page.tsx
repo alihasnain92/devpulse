@@ -168,7 +168,6 @@ export default function NotificationsPage() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Header */}
         <OperationalPageHeader
-          eyebrow="Incident Alerts"
           title="Notification Center"
           description="In-app operational alerts generated on incident creation and verified automated recovery."
           badge={

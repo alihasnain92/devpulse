@@ -22,6 +22,7 @@ import { LatencyChart } from '@/components/charts/latency-chart';
 import { UptimeBar } from '@/components/charts/uptime-bar';
 import {
   ArrowLeft,
+  ArrowRight,
   Edit,
   Trash2,
   Play,
@@ -662,8 +663,9 @@ export default function MonitorDetailPage({ params }: MonitorDetailPageProps) {
                 </p>
               </div>
               <Link href="/incidents">
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs font-mono text-[var(--text-secondary)]">
-                  All Incidents &rarr;
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs font-mono text-[var(--text-secondary)] gap-1">
+                  <span>All Incidents</span>
+                  <ArrowRight className="h-3 w-3" />
                 </Button>
               </Link>
             </div>

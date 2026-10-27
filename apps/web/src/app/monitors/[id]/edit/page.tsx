@@ -156,7 +156,6 @@ export default function EditMonitorPage({ params }: EditMonitorPageProps) {
 
         {/* Page Header */}
         <OperationalPageHeader
-          eyebrow="Configuration"
           title="Edit Monitor"
           description={`Update health check parameters and targets for ${name || 'endpoint'}.`}
         />

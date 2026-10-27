@@ -122,7 +122,6 @@ export default function NewMonitorPage() {
 
         {/* Page Header */}
         <OperationalPageHeader
-          eyebrow="Configuration"
           title="Create API Monitor"
           description="Configure an automated health check endpoint, execution cadence, and expected response criteria."
         />

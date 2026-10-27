@@ -10,6 +10,7 @@ interface UptimeBarProps {
 
 export function UptimeBar({ series, isLoading }: UptimeBarProps) {
   const [activeBucket, setActiveBucket] = useState<TimeBucketDto | null>(null);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   if (isLoading) {
     return (
@@ -47,8 +48,14 @@ export function UptimeBar({ series, isLoading }: UptimeBarProps) {
           {series.map((bucket, idx) => (
             <div
               key={bucket.timestamp || idx}
-              onMouseEnter={() => setActiveBucket(bucket)}
-              onMouseLeave={() => setActiveBucket(null)}
+              onMouseEnter={() => {
+                setActiveBucket(bucket);
+                setActiveIndex(idx);
+              }}
+              onMouseLeave={() => {
+                setActiveBucket(null);
+                setActiveIndex(null);
+              }}
               className={`flex-1 min-w-0 h-full rounded-[1px] sm:rounded-[2px] transition-opacity cursor-pointer ${getBucketColor(
                 bucket,
               )}`}
@@ -61,41 +68,62 @@ export function UptimeBar({ series, isLoading }: UptimeBarProps) {
           ))}
         </div>
 
-        {/* Hover inspection card */}
+        {/* Hover inspection card anchored relative to hovered bucket with viewport edge clamping */}
         {activeBucket && (
-          <div className="absolute -top-14 left-1/2 -translate-x-1/2 z-10 pointer-events-none rounded-[4px] border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs shadow-md whitespace-nowrap flex items-center gap-2.5">
-            <span className="font-semibold text-[var(--text-primary)] font-mono">
-              {activeBucket.label}
-            </span>
-            <span className="text-[var(--text-dim)]">•</span>
-            <span
-              className={`font-mono font-bold tabular-nums ${
-                activeBucket.uptimePercent === null
-                  ? 'text-[var(--text-muted)]'
-                  : activeBucket.uptimePercent === 100
-                    ? 'text-[var(--status-healthy)]'
-                    : activeBucket.uptimePercent > 0
-                      ? 'text-[var(--status-degraded)]'
-                      : 'text-[var(--status-down)]'
-              }`}
-            >
-              {activeBucket.uptimePercent !== null
-                ? `${activeBucket.uptimePercent}%`
-                : 'No data'}
-            </span>
-            <span className="text-[var(--text-dim)]">•</span>
-            <span className="text-[var(--text-secondary)] font-mono tabular-nums">
-              {activeBucket.successfulChecks}/{activeBucket.totalChecks} checks
-            </span>
-            {activeBucket.avgLatencyMs !== null && (
-              <>
-                <span className="text-[var(--text-dim)]">•</span>
-                <span className="font-mono text-[var(--primary)] tabular-nums">
-                  {activeBucket.avgLatencyMs}ms
+          (() => {
+            const percentPos =
+              series.length > 1 && activeIndex !== null
+                ? (activeIndex / (series.length - 1)) * 100
+                : 50;
+            const translateTransform =
+              percentPos < 15
+                ? 'translateX(0%)'
+                : percentPos > 85
+                  ? 'translateX(-100%)'
+                  : 'translateX(-50%)';
+
+            return (
+              <div
+                className="absolute -top-14 z-10 pointer-events-none rounded-[4px] border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs shadow-md whitespace-nowrap flex items-center gap-2.5 transition-all duration-75"
+                style={{
+                  left: `${percentPos}%`,
+                  transform: translateTransform,
+                }}
+              >
+                <span className="font-semibold text-[var(--text-primary)] font-mono">
+                  {activeBucket.label}
                 </span>
-              </>
-            )}
-          </div>
+                <span className="text-[var(--text-dim)]">•</span>
+                <span
+                  className={`font-mono font-bold tabular-nums ${
+                    activeBucket.uptimePercent === null
+                      ? 'text-[var(--text-muted)]'
+                      : activeBucket.uptimePercent === 100
+                        ? 'text-[var(--status-healthy)]'
+                        : activeBucket.uptimePercent > 0
+                          ? 'text-[var(--status-degraded)]'
+                          : 'text-[var(--status-down)]'
+                  }`}
+                >
+                  {activeBucket.uptimePercent !== null
+                    ? `${activeBucket.uptimePercent}%`
+                    : 'No data'}
+                </span>
+                <span className="text-[var(--text-dim)]">•</span>
+                <span className="text-[var(--text-secondary)] font-mono tabular-nums">
+                  {activeBucket.successfulChecks}/{activeBucket.totalChecks} checks
+                </span>
+                {activeBucket.avgLatencyMs !== null && (
+                  <>
+                    <span className="text-[var(--text-dim)]">•</span>
+                    <span className="font-mono text-[var(--primary)] tabular-nums">
+                      {activeBucket.avgLatencyMs}ms
+                    </span>
+                  </>
+                )}
+              </div>
+            );
+          })()
         )}
       </div>
 

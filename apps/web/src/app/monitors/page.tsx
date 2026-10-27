@@ -17,6 +17,7 @@ import { MonitorActions } from '@/components/monitors/monitor-actions';
 import {
   Plus,
   AlertCircle,
+  ArrowRight,
   CheckCircle2,
   RefreshCw,
   Search,
@@ -227,7 +228,6 @@ export default function MonitorsPage() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
         {/* Header */}
         <OperationalPageHeader
-          eyebrow="Target Directory"
           title="Monitors"
           badge={
             <Badge variant="secondary" className="font-mono text-xs tabular-nums">
@@ -540,8 +540,9 @@ export default function MonitorsPage() {
                     {/* Quick Actions Row */}
                     <div className="pt-1 flex items-center justify-between border-t border-[var(--border-subtle)]">
                       <Link href={`/monitors/${monitor.id}`}>
-                        <Button variant="ghost" size="sm" className="h-8 px-2 text-xs font-mono text-[var(--primary)]">
-                          View Details &rarr;
+                        <Button variant="ghost" size="sm" className="h-8 px-2 text-xs font-mono text-[var(--primary)] gap-1">
+                          <span>View Details</span>
+                          <ArrowRight className="h-3 w-3" />
                         </Button>
                       </Link>
 

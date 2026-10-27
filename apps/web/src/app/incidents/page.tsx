@@ -15,6 +15,7 @@ import { MetricCard } from '@/components/ui/metric-card';
 import { StatusIndicator } from '@/components/ui/status-indicator';
 import {
   AlertTriangle,
+  ArrowRight,
   Clock,
   Radio,
   RefreshCw,
@@ -75,13 +76,16 @@ export default function IncidentsPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'resolved'>('all');
   const [, setTick] = useState(0);
 
-  // Periodic tick for real-time live duration counter on ongoing incidents
+  const hasOngoing = incidents.some((i) => !i.resolvedAt);
+
+  // Periodic tick for live duration counter on ongoing incidents only
   useEffect(() => {
+    if (!hasOngoing) return;
     const interval = setInterval(() => {
       setTick((t) => t + 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [hasOngoing]);
 
   const loadIncidents = async (silent = false) => {
     try {
@@ -149,7 +153,6 @@ export default function IncidentsPage() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Header */}
         <OperationalPageHeader
-          eyebrow="Reliability Log"
           title="Incidents"
           description="Automated failure detection, live downtime duration tracking, and verified recovery records."
           badge={
@@ -311,7 +314,7 @@ export default function IncidentsPage() {
                           ACTIVE OUTAGE
                         </Badge>
                         {incident.isSeeded && (
-                          <Badge variant="outline" className="border-amber-500/40 text-amber-400 text-[10px] font-mono px-1.5 py-0.5">
+                          <Badge variant="outline" className="border-[var(--border-subtle)] bg-[var(--surface-subtle)] text-[var(--text-muted)] text-[10px] font-mono px-1.5 py-0.5">
                             SIMULATED
                           </Badge>
                         )}
@@ -527,8 +530,9 @@ export default function IncidentsPage() {
 
                       <div className="flex items-center justify-between text-[10px] text-[var(--text-dim)] pt-1">
                         <span>Started {timeAgo(incident.startedAt)}</span>
-                        <Link href={`/monitors/${incident.monitorId}`} className="text-[var(--primary)] hover:underline">
-                          View details &rarr;
+                        <Link href={`/monitors/${incident.monitorId}`} className="text-[var(--primary)] hover:underline flex items-center gap-1 font-mono">
+                          <span>View details</span>
+                          <ArrowRight className="h-2.5 w-2.5" />
                         </Link>
                       </div>
                     </div>
